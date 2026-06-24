@@ -1,0 +1,395 @@
+:root {
+    --sage-bg: #9cb594;
+    --sage-dark: #8dae84;
+    --white: #ffffff;
+    --pink: #f72585;
+    --text-dark: #3a5a40;
+}
+
+body {
+    margin: 0;
+    font-family: 'Poppins', sans-serif;
+    background-color: var(--sage-bg);
+    color: var(--text-dark);
+    display: flex;
+}
+
+main {
+    padding: 30px 40px !important;
+}
+
+
+/* Top Header Area matching your screenshots */
+.header-section {
+    background: var(--white);
+    padding: 30px;
+    border-radius: 16px;
+    margin-bottom: 25px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+}
+
+.header-text h2 {
+    margin: 0;
+    font-size: 2rem;
+    font-weight: 700;
+    color: #1e293b;
+}
+
+.header-text p {
+    margin: 5px 0 0;
+    color: #64748b;
+}
+
+/* Stats Cards */
+.stats-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 20px;
+    margin-bottom: 25px;
+}
+
+.stat-card {
+    background: var(--white);
+    padding: 20px;
+    border-radius: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.03);
+}
+
+.stat-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    display: block;
+}
+
+.stat-label {
+    font-size: 0.8rem;
+    color: #64748b;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.icon-box {
+    width: 45px;
+    height: 45px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+}
+
+/* Filter Controls */
+.filter-bar {
+    background: var(--white);
+    padding: 20px;
+    border-radius: 20px;
+    margin-bottom: 25px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.03);
+}
+
+.filter-bar form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    align-items: center;
+    /* ITO ANG MAG-CENTER SA LAHAT VERTICALLY */
+    justify-content: flex-start;
+}
+
+/* Container para sa Label + Input pair */
+.filter-group {
+    display: flex;
+    align-items: center;
+    /* I-center ang label at input sa loob */
+    gap: 10px;
+}
+
+.filter-group label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #64748b;
+    white-space: nowrap;
+    /* Para hindi mag-break ang text */
+    margin: 0;
+    /* Alisin ang default margin */
+}
+
+select,
+input[type="date"] {
+    padding: 10px 15px;
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
+    background: #f8fafc;
+    font-family: 'Poppins', sans-serif;
+    outline: none;
+    height: 42px;
+    /* Fixed height para siguradong pantay lahat */
+    box-sizing: border-box;
+}
+
+.btn-update {
+    background: #8dae84;
+    color: white;
+    padding: 0 25px;
+    height: 42px;
+    /* Kaparehas ng height ng inputs */
+    border: none;
+    border-radius: 10px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: 0.3s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Chart Containers */
+.charts-wrapper {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 25px;
+}
+
+.chart-container {
+    background: var(--white);
+    padding: 25px;
+    border-radius: 25px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+}
+
+.chart-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.btn-export-small {
+    background: transparent;
+    color: #6d8a66;
+    border: 1px solid #6d8a66;
+    padding: 5px 12px;
+    border-radius: 8px;
+    font-size: 0.75rem;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.btn-export-small:hover {
+    background: #6d8a66;
+    color: white;
+}
+
+.export-main {
+    background: #8dae84;
+    color: white;
+    padding: 12px 20px;
+    border-radius: 12px;
+    text-decoration: none;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+@media print {
+
+    /* Hide everything except the main content */
+    body * {
+        visibility: hidden;
+    }
+
+    main,
+    main * {
+        visibility: visible;
+    }
+
+    /* Position main at the very top-left of the page */
+    main {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        padding: 0 !important;
+        margin: 0 !important;
+        background-color: var(--sage-bg) !important;
+        -webkit-print-color-adjust: exact;
+        /* Forces background colors to show */
+        print-color-adjust: exact;
+    }
+
+    /* Hide the filter bar and the export buttons in the printed report */
+    .filter-bar,
+    .export-main,
+    .btn-export-small,
+    #sidebar,
+    .sidebar {
+        /* Add your sidebar class/id here */
+        display: none !important;
+    }
+
+    /* Ensure charts don't get cut off */
+    .charts-wrapper {
+        display: block !important;
+        /* Stack them for better PDF fit */
+    }
+
+    /* Hanapin ang .chart-container sa style mo at siguraduhing ganito ang porma */
+    .chart-container {
+        background: var(--white);
+        padding: 25px;
+        border-radius: 25px;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+        position: relative;
+        /* Importante para sa Chart.js */
+        height: 400px;
+        /* Dito natin itatakda ang limitasyon ng laki */
+        width: 100%;
+        /* Siguraduhing responsive ang lapad */
+    }
+
+    /* Siguraduhin na ang canvas mismo ay susunod sa container */
+    canvas {
+        max-height: 100% !important;
+        width: 100% !important;
+    }
+}
+
+/* Export Modal Styles */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+}
+
+.modal-content {
+    background-color: var(--white);
+    margin: 10% auto;
+    padding: 30px;
+    border-radius: 20px;
+    width: 400px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+    animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+    from {
+        transform: translateY(-50px);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 10px;
+}
+
+.modal-header h3 {
+    margin: 0;
+    color: var(--text-dark);
+}
+
+.export-option {
+    margin-bottom: 20px;
+}
+
+.export-option label {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 700;
+    margin-bottom: 5px;
+    color: #64748b;
+}
+
+.format-selector {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+.btn-format {
+    flex: 1;
+    padding: 12px;
+    border: 2px solid #e2e8f0;
+    border-radius: 12px;
+    background: white;
+    cursor: pointer;
+    font-weight: 600;
+    transition: 0.3s;
+    text-align: center;
+}
+
+.btn-format:hover {
+    border-color: #6d8a66;
+    color: #6d8a66;
+}
+
+.btn-format.active {
+    background: #6d8a66;
+    color: white;
+    border-color: #6d8a66;
+}
+
+.modal-footer {
+    display: flex;
+    gap: 10px;
+    margin-top: 25px;
+}
+
+.btn-cancel {
+    flex: 1;
+    background: #f3f4f6;
+    color: #4b5563;
+    border: none;
+    padding: 12px;
+    border-radius: 8px;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.btn-confirm-export {
+    flex: 1;
+    background: #8dae84;
+    color: #F3F4F4;
+    border: none;
+    padding: 12px;
+    border-radius: 8px;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+#chartjs-tooltip {
+    opacity: 1;
+    position: absolute;
+    background: rgba(30, 41, 59, 0.95);
+    color: white;
+    border-radius: 8px;
+    padding: 12px;
+    pointer-events: none;
+    transition: all .1s ease;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    font-family: 'Poppins', sans-serif;
+    min-width: 140px;
+}
