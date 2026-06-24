@@ -1,4 +1,6 @@
 <?php
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
 /**
  * FOODSAVE SMART INVENTORY SYSTEM
  * Fully Functional Dashboard - Final Production Version
@@ -11,76 +13,24 @@ include 'auth.php';
 include 'db.php';
 
 // =========================================================================
-// 2. LIVE DATA FETCHING ENGINE (Gagamit ng product_price base sa iyong DB)
+// 2. LIVE DATA FETCHING ENGINE (Using inventory view + sold/returned/wasted tables)
 // =========================================================================
-$products_config = [];
+$user_id = $_SESSION['user_id'];
 
-if ($conn) {
-    // In-update mula 'price' patungong 'product_price' para tugma sa inyong DB
-    $product_query = mysqli_query($conn, "SELECT name, product_price, low_threshold FROM products");
-    
-    if ($product_query) {
-        while($row = mysqli_fetch_assoc($product_query)){
-            $products_config[$row['name']] = [
-                'price' => $row['product_price'], 
-                'low_threshold' => $row['low_threshold']
-            ];
-        }
-    }
-}
+// Get low_stock_threshold from user settings
+$user_settings = mysqli_fetch_assoc(mysqli_query($conn, "SELECT low_stock_threshold FROM users WHERE user_id = $user_id"));
+$low_stock_threshold = $user_settings['low_stock_threshold'] ?? 3;
 
-// FALLBACK PLACEHOLDER: Kung bago pa lang i-load o kung may inaayos sa db, hindi magka-crash ang page
-if (empty($products_config)) {
-    $products_config = [
-        'Tuna'      => ['price' => 120, 'low_threshold' => 5],
-        'Pepperoni' => ['price' => 150, 'low_threshold' => 5],
-        'Ham'       => ['price' => 100, 'low_threshold' => 5],
-        'Sausage'   => ['price' => 130, 'low_threshold' => 5],
-        '3-Cheese'  => ['price' => 110, 'low_threshold' => 5],
-        'Spinach'   => ['price' => 95,  'low_threshold' => 5],
-    ];
-}
+// Fetch product data from the inventory view (which already computes stocks, sold, wasted, etc.)
+$inv_query = mysqli_query($conn, "
+    SELECT product_name, price, original_qty, 
+           total_sold, total_returned, total_wasted, remaining_stocks, status,
+           expiry_date, days_remaining
+    FROM inventory 
+    WHERE user_id = $user_id 
+    AND DATEDIFF(expiry_date, CURDATE()) >= -1
+");
 
-$live_scans = [];
-$days_sales_distribution = ['Monday' => 0, 'Tuesday' => 0, 'Wednesday' => 0, 'Thursday' => 0, 'Friday' => 0, 'Saturday' => 0, 'Sunday' => 0];
-
-foreach ($products_config as $name => $config) {
-    if ($conn) {
-        // IN: Bilangin lahat ng na-scan pabaon sa stock
-        $q_in = mysqli_query($conn, "SELECT COUNT(*) as total FROM scan_logs WHERE product_name='$name' AND action='IN'");
-        $r_in = $q_in ? mysqli_fetch_assoc($q_in) : ['total' => 0];
-        
-        // OUT: Nabili bago mag-expire (Para sa Money Saved rule)
-        $q_out = mysqli_query($conn, "SELECT COUNT(*) as total FROM scan_logs WHERE product_name='$name' AND action='OUT' AND status='BEFORE_EXPIRY'");
-        $r_out = $q_out ? mysqli_fetch_assoc($q_out) : ['total' => 0];
-        
-        // RETURN / EXPIRED: Bilangin ang nasayang (Para sa Estimated Waste rule)
-        $q_ret = mysqli_query($conn, "SELECT COUNT(*) as total FROM scan_logs WHERE product_name='$name' AND (action='RETURN' OR status='EXPIRED')");
-        $r_ret = $q_ret ? mysqli_fetch_assoc($q_ret) : ['total' => 0];
-
-        $live_scans[$name] = [
-            'in' => $r_in['total'],
-            'out_before_expiry' => $r_out['total'],
-            'expired_unregistered' => $r_ret['total']
-        ];
-    } else {
-        $live_scans[$name] = ['in' => 0, 'out_before_expiry' => 0, 'expired_unregistered' => 0];
-    }
-}
-
-// PEAK SALES DAY ANALYTICS ENGINE
-if ($conn) {
-    $days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-    foreach($days as $day){
-        $q_day = mysqli_query($conn, "SELECT COUNT(*) as total FROM scan_logs WHERE DAYNAME(scan_timestamp)='$day' AND action='OUT'");
-        $r_day = $q_day ? mysqli_fetch_assoc($q_day) : ['total' => 0];
-        $days_sales_distribution[$day] = $r_day['total'];
-    }
-}
-
-// =========================================================================
-// 3. CORE BUSINESS MATHEMATICS (Awtomatikong magko-compute sa bawat live scan)
-// =========================================================================
 $total_products = 0;
 $total_sold = 0;
 $total_revenue = 0;
@@ -92,45 +42,59 @@ $products_data = [];
 $wasted_tracker = [];
 $best_seller_tracker = [];
 
-foreach ($live_scans as $name => $scans) {
-    $price = $products_config[$name]['price'];
-    $in = $scans['in'];
-    $sold = $scans['out_before_expiry'];
-    $returned = $scans['expired_unregistered'];
-    
-    // Tumpak na natitirang stock (Formula: In - Out - Returned)
-    $current_stock = $in - ($sold + $returned);
-    if($current_stock < 0) $current_stock = 0;
+$days_sales_distribution = ['Monday' => 0, 'Tuesday' => 0, 'Wednesday' => 0, 'Thursday' => 0, 'Friday' => 0, 'Saturday' => 0, 'Sunday' => 0];
 
-    // Financial calculations
-    $revenue = $sold * $price;
-    $saved   = $sold * $price;  
-    $waste   = $returned * $price; 
+if ($inv_query) {
+    while ($row = mysqli_fetch_assoc($inv_query)) {
+        $name    = $row['product_name'];
+        $price   = $row['price'];
+        $qty     = $row['original_qty'];
+        $sold    = $row['total_sold'];
+        $returned = $row['total_returned'];
+        $wasted  = $row['total_wasted'];
+        $stocks  = $row['remaining_stocks'];
 
-    // Global system metrics accumulators
-    $total_products += $in;
-    $total_sold += $sold;
-    $total_revenue += $revenue;
-    $money_saved += $saved;
-    $estimated_waste += $waste;
+        // Accumulate totals
+        $total_products += $qty;
+        $total_sold += $sold;
+        $total_revenue += ($sold * $price);
+        $money_saved += ($sold * $price);
+        $estimated_waste += ($wasted * $price);
 
-    // Magbibilang lang bilang Low Stock kung may pumasok na na-IN na produkto
-    if ($in > 0 && $current_stock <= $products_config[$name]['low_threshold']) {
-        $low_stock_items++;
+        // Low stock check
+        if ($stocks > 0 && $stocks <= $low_stock_threshold && !in_array($row['status'], ['EXPIRED', 'SOLD OUT'])) {
+            $low_stock_items++;
+        }
+
+        // Aggregate by product name for charts
+        if (!isset($products_data[$name])) {
+            $products_data[$name] = ['in_stock' => 0, 'sold' => 0, 'returned' => 0, 'revenue' => 0];
+            $wasted_tracker[$name] = 0;
+            $best_seller_tracker[$name] = 0;
+        }
+        $products_data[$name]['in_stock'] += $stocks;
+        $products_data[$name]['sold'] += $sold;
+        $products_data[$name]['returned'] += $wasted;
+        $products_data[$name]['revenue'] += ($sold * $price);
+        $wasted_tracker[$name] += $wasted;
+        $best_seller_tracker[$name] += $sold;
     }
-
-    $wasted_tracker[$name] = $returned;
-    $best_seller_tracker[$name] = $sold;
-
-    $products_data[$name] = [
-        'in_stock' => $current_stock,
-        'sold'     => $sold,
-        'returned' => $returned,
-        'revenue'  => $revenue
-    ];
 }
 
-// Dynamic Sorting Engine para sa mga insights at katumpakan ng rankings
+// PEAK SALES DAY ANALYTICS ENGINE (based on sold_at timestamps)
+$days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+foreach ($days as $day) {
+    $q_day = mysqli_query($conn, "
+        SELECT COALESCE(SUM(s.sold_quantity), 0) as total 
+        FROM sold s 
+        JOIN products p ON s.product_id = p.product_id 
+        WHERE p.user_id = $user_id AND DAYNAME(s.sold_at) = '$day'
+    ");
+    $r_day = $q_day ? mysqli_fetch_assoc($q_day) : ['total' => 0];
+    $days_sales_distribution[$day] = $r_day['total'];
+}
+
+// Dynamic Sorting Engine
 arsort($wasted_tracker);
 arsort($best_seller_tracker);
 arsort($days_sales_distribution);
@@ -146,7 +110,7 @@ $fresh_percentage = ($overall_health > 0) ? round($overall_health * 0.8) : 0;
 $expiring_percentage = ($overall_health > 0) ? round($overall_health * 0.2) : 0;
 $expired_percentage = ($overall_health > 0) ? (100 - ($fresh_percentage + $expiring_percentage)) : 0;
 
-// Pagkuha ng mga tamang arrays para sa JavaScript injection
+// Arrays for JavaScript charts
 $product_names  = array_keys($products_data);
 $stock_counts   = array_column($products_data, 'in_stock');
 $sold_counts    = array_column($products_data, 'sold');
