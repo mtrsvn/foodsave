@@ -162,10 +162,6 @@ if (isset($_GET['ajax']) && $_GET['ajax'] == '1') {
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght=400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/inventory.css">
-    <style>
-        .clickable-card { transition: all 0.2s ease-in-out; cursor: pointer; }
-        .clickable-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
-    </style>
 </head>
 <body class="bg-[#f4f7f6] text-gray-700">
 
@@ -181,28 +177,28 @@ if (isset($_GET['ajax']) && $_GET['ajax'] == '1') {
     </div>
 
     <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-        <div onclick="goToPage('products.php')" class="clickable-card bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center space-x-4">
+        <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center space-x-4">
             <div class="p-3 bg-blue-50 text-blue-600 rounded-lg"><i class="fa-solid fa-box text-xl"></i></div>
             <div>
                 <div id="val-total-products" class="text-3xl font-bold text-[#2d4059]"><?= $total_products ?></div>
                 <div class="text-xs text-gray-400 font-medium">Total Products</div>
             </div>
         </div>
-        <div onclick="goToPage('sales.php')" class="clickable-card bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center space-x-4">
+        <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center space-x-4">
             <div class="p-3 bg-orange-50 text-orange-500 rounded-lg"><i class="fa-solid fa-cart-shopping text-xl"></i></div>
             <div>
                 <div id="val-total-sold" class="text-3xl font-bold text-orange-500"><?= $total_sold ?></div>
                 <div class="text-xs text-gray-400 font-medium">Total Sold</div>
             </div>
         </div>
-        <div onclick="goToPage('revenue.php')" class="clickable-card bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center space-x-4">
+        <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center space-x-4">
             <div class="p-3 bg-green-50 text-green-600 rounded-lg"><i class="fa-solid fa-arrow-trend-up text-xl"></i></div>
             <div>
                 <div id="val-total-revenue" class="text-3xl font-bold text-green-600">₱<?= number_format($total_revenue, 2) ?></div>
                 <div class="text-xs text-gray-400 font-medium">Total Revenue</div>
             </div>
         </div>
-        <div onclick="goToPage('alerts.php')" class="clickable-card bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center space-x-4">
+        <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center space-x-4">
             <div class="p-3 bg-red-50 text-red-500 rounded-lg"><i class="fa-solid fa-triangle-exclamation text-xl"></i></div>
             <div>
                 <div id="val-low-stock" class="text-3xl font-bold text-red-500"><?= $low_stock_items ?></div>
@@ -214,7 +210,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] == '1') {
 
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
-        <div onclick="goToPage('health_details.php')" class="clickable-card bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-between">
+        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-between">
             <div>
                 <h3 class="font-bold text-[#2d4059] text-sm flex items-center"><span class="text-pink-400 mr-2">🧠</span> Inventory Health Score</h3>
                 <p class="text-[11px] text-gray-400 mt-0.5">Overall condition of your sandwich stock</p>
@@ -254,7 +250,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] == '1') {
             </div>
         </div>
 
-        <div onclick="goToPage('financial_details.php')" class="clickable-card bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-between">
+        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-between">
             <div>
                 <h3 class="font-bold text-[#2d4059] text-sm flex items-center"><span class="text-orange-400 mr-2">💰</span> Waste vs Savings</h3>
                 <p class="text-[11px] text-gray-400 mt-0.5">Financial impact of your inventory decisions</p>
@@ -279,7 +275,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] == '1') {
             </div>
         </div>
 
-        <div onclick="goToPage('trends_details.php')" class="clickable-card bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-between">
+        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-between">
             <div>
                 <h3 class="font-bold text-[#2d4059] text-sm flex items-center"><span class="text-purple-400 mr-2">📊</span> Trend Insights</h3>
                 <p class="text-[11px] text-gray-400 mt-0.5">Quick facts about your inventory</p>
@@ -293,7 +289,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] == '1') {
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div onclick="goToPage('stock_vs_sold.php')" class="clickable-card bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-between">
+        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-between">
             <div>
                 <h3 class="font-bold text-[#2d4059] text-sm">Stock, Sold and Returned</h3>
                 <p class="text-[11px] text-gray-400 mt-0.5">Remaining stock, units sold, and returns per sandwich type</p>
@@ -303,7 +299,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] == '1') {
             </div>
         </div>
 
-        <div onclick="goToPage('sales_share.php')" class="clickable-card bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col items-center justify-between">
+        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col items-center justify-between">
             <div class="w-full text-left">
                 <h3 class="font-bold text-[#2d4059] text-sm">Sales Share</h3>
                 <p class="text-[11px] text-gray-400 mt-0.5">Which sandwich sells the most (Popularity Sorted)</p>
@@ -313,7 +309,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] == '1') {
             </div>
         </div>
 
-        <div onclick="goToPage('revenue_details.php')" class="clickable-card bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-between">
+        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-between">
             <div>
                 <h3 class="font-bold text-[#2d4059] text-sm">Revenue per Product</h3>
                 <p class="text-[11px] text-gray-400 mt-0.5">Total ₱ earned from each sandwich</p>
@@ -325,10 +321,6 @@ if (isset($_GET['ajax']) && $_GET['ajax'] == '1') {
     </div>
 
     <script>
-        function goToPage(url) { 
-            window.location.href = url;
-        }
-
         let labelsList   = <?= json_encode($product_names) ?>;
         let stockData    = <?= json_encode($stock_counts) ?>;
         let soldData     = <?= json_encode($sold_counts) ?>;
@@ -387,8 +379,29 @@ if (isset($_GET['ajax']) && $_GET['ajax'] == '1') {
             data: { labels: labelsList, datasets: [{ data: revenueData, backgroundColor: chartColors, barThickness: 14 }] },
             options: { 
                 indexAxis: 'y', responsive: true, maintainAspectRatio: false, 
-                plugins: { legend: { display: false } }, 
-                scales: { x: { beginAtZero: true, max: isAllZero ? 10 : null, display: false }, y: { grid: { display: false }, border: { display: false } } },
+                plugins: { 
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return '₱' + Number(context.raw).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                            }
+                        }
+                    }
+                }, 
+                scales: { 
+                    x: { 
+                        beginAtZero: true, 
+                        max: isAllZero ? 10 : null, 
+                        display: true,
+                        ticks: {
+                            callback: function(value) {
+                                return '₱' + value;
+                            }
+                        }
+                    }, 
+                    y: { grid: { display: false }, border: { display: false } } 
+                },
                 animation: { duration: 500 }
             }
         });
