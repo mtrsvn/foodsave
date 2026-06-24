@@ -33,6 +33,11 @@ ini_set('date.timezone', 'Asia/Manila');
         ?>
         <ul>
             <li>
+                <a href="dashboard.php" class="<?= ($current_page == 'dashboard.php') ? 'active' : '' ?>">
+                    <i class="fas fa-tachometer-alt"></i> Dashboard
+                </a>
+            </li>
+            <li>
                 <a href="inventory.php" class="<?= ($current_page == 'inventory.php') ? 'active' : '' ?>">
                     <i class="fas fa-box"></i> Inventory
                 </a>
