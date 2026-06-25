@@ -163,7 +163,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] == '1') {
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/inventory.css">
 </head>
-<body class="bg-[#f4f7f6] text-gray-700">
+<body class="bg-[#9cb594] text-gray-700">
 
     <?php include 'sidebar.php'; ?>
 
@@ -227,7 +227,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] == '1') {
                     <div class="bg-green-50 text-green-700 font-bold text-[11px] px-2 py-0.5 rounded-md w-max flex items-center">Live Scanner Feed</div>
                     <div>
                         <div class="flex justify-between text-gray-500 text-[11px] font-medium mb-1">
-                            <span><span class="w-2 h-2 rounded-full bg-green-600 mr-2 inline-block"></span>Fresh</span>
+                            <span><span class="w-2 h-2 rounded-full bg-green-600 mr-2 inline-block"></span>Usable</span>
                             <span id="val-fresh-pct" class="font-bold text-gray-700"><?= $fresh_percentage ?>%</span>
                         </div>
                         <div class="w-full bg-gray-100 h-1.5 rounded-full"><div id="bar-fresh" class="bg-green-600 h-1.5 rounded-full transition-all duration-500" style="width: <?= $fresh_percentage ?>%"></div></div>
