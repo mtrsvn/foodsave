@@ -31,13 +31,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Capture Retroactive Wizard Data from the Modal Submission
         $has_retro_sold   = isset($_POST['has_retro_sold']);
         $retro_sold_qty   = (int)($_POST['retro_sold_qty'] ?? 0);
-        $retro_sold_at    = trim($_POST['retro_sold_at'] ?? '');
+        $retro_sold_ats = $_POST['retro_sold_at'] ?? [];
 
         $has_retro_return     = isset($_POST['has_retro_return']);
         $retro_return_qtys    = $_POST['retro_return_qty'] ?? [];
         $retro_return_reasons = $_POST['retro_return_reason'] ?? [];
         $retro_return_ats     = $_POST['retro_return_at'] ?? [];
-
+        $waste_logged_at = trim($_POST['waste_logged_at'] ?? '');
         $scanned_date_raw = trim($_POST['scanned_date'] ?? '');
 
         if (!empty($scanned_date_raw)) {
@@ -132,7 +132,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 $clean_ret_at = str_replace('T', ' ', $r_at);
                                 if (strlen($clean_ret_at) == 16) $clean_ret_at .= ':00';
 
-                                // Record direct target balancing sales log offsets
                                 $negative_sold = $r_qty * -1;
                                 $rs = $conn->prepare("INSERT INTO sold (product_id, sold_item, sold_quantity, user_id, sold_at) VALUES (?, ?, ?, ?, ?)");
                                 $rs->bind_param("isiis", $p_id, $raw_name, $negative_sold, $user_id, $clean_ret_at);
@@ -153,8 +152,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     $ws = $conn->prepare("INSERT INTO wasted (product_id,wasted_item,wasted_quantity,user_id,wasted_at) VALUES (?,?,?,?,?)");
                                     $ws->bind_param("isiis",$p_id,$formatted_name,$r_qty,$user_id,$clean_ret_at);
                                     $ws->execute(); $ws->close();
+
+                                    $msg_type = "WASTE";
                                 } else {
-                                    // Handles: 'Wrong Item' or 'Customer Change of Mind'
                                     $h_return = $conn->prepare("INSERT INTO history (user_id, product_id, product_name, quantity, price, type, expiry_date, return_reason, created_at) VALUES (?, ?, ?, ?, ?, 'RETURN', ?, ?, ?)");
                                     $h_return->bind_param("iisidsss", $user_id, $p_id, $formatted_name, $r_qty, $auto_price, $exp, $r_reason, $clean_ret_at);
                                     $h_return->execute(); $h_return->close();
@@ -163,9 +163,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     $rr->bind_param("isiisss", $p_id, $formatted_name, $r_qty, $user_id, $r_reason, $scanned_date, $clean_ret_at);
                                     $rr->execute(); $rr->close();
 
+                                    $msg_type = "RESTOCKED";
+
                                     $remaining_stock += $r_qty;
                                 }
                             }
+                        }
+
+                        if (!empty($waste_logged_at)) {
+                            $clean_waste_at = str_replace('T', ' ', $waste_logged_at);
+                            if (strlen($clean_waste_at) == 16) {
+                                $clean_waste_at .= ':00'; 
+                            }
+                        
+                            $waste_reason = "Staff Request: Logged out / Wasted from Shelves.";
+                        
+                            $hw = $conn->prepare("INSERT INTO history (user_id, product_id, product_name, quantity, price, type, expiry_date, return_reason, created_at) VALUES (?, ?, ?, ?, ?, 'WASTED', ?, ?, ?)");
+                            $hw->bind_param("iisidsss", $user_id, $p_id, $formatted_name, $remaining_stock, $auto_price, $exp, $waste_reason, $clean_waste_at);
+                            $hw->execute(); 
+                            $hw->close();
+                        
+                            $w_stmt = $conn->prepare("INSERT INTO wasted (product_id, wasted_item, wasted_quantity, user_id, wasted_at) VALUES (?, ?, ?, ?, ?)");
+                            $w_stmt->bind_param("isiis", $p_id, $formatted_name, $remaining_stock, $user_id, $clean_waste_at);
+                            $w_stmt->execute(); 
+                            $w_stmt->close();
+                        
+                            $u_status = $conn->prepare("UPDATE products SET status='WASTED' WHERE product_id=?");
+                            $u_status->bind_param("i", $p_id); 
+                            $u_status->execute(); 
+                            $u_status->close();
+                            
+                            $remaining_stock = 0; 
                         }
 
                         $today_real = date('Y-m-d');
@@ -302,7 +330,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $rq = $can_take * -1;
 
                         $rs = $conn->prepare("INSERT INTO sold (product_id,sold_item,sold_quantity,user_id,sold_at) VALUES (?,?,?,?,NOW())");
-                        $rs->bind_param("isii", $p_id, $raw_name, $can_take, $user_id); 
+                        $rs->bind_param("isii", $p_id, $raw_name, $rq, $user_id); 
                         $rs->execute();
                         $rs->close();
 
@@ -679,264 +707,292 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     .retro-modal-backdrop {
-    display: none;
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(15, 23, 42, 0.4);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    z-index: 9999;
-    align-items: center;
-    justify-content: center;
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-}
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(15, 23, 42, 0.4);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        z-index: 9999;
+        align-items: center;
+        justify-content: center;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
 
-.retro-modal-card {
-    background: #ffffff;
-    padding: 40px 32px;
-    border-radius: 16px;
-    max-width: 440px;
-    width: 90%;
-    box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04);
-    border: 1px solid rgba(241, 245, 249, 0.8);
-    box-sizing: border-box;
-}
+    .retro-modal-card {
+        background: #ffffff;
+        padding: 40px 32px;
+        border-radius: 16px;
+        max-width: 440px;
+        width: 90%;
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        border: 1px solid rgba(241, 245, 249, 0.8);
+        box-sizing: border-box;
+    }
 
-.retro-modal-card.wide-card {
-    padding: 36px;
-    max-width: 580px;
-    width: 92%;
-    max-height: 85vh;
-    overflow-y: auto;
-    border-radius: 20px;
-    box-shadow: 0 25px 50px -12px rgba(0,0,0,0.15);
-}
+    .retro-modal-card.wide-card {
+        padding: 36px;
+        max-width: 580px;
+        width: 92%;
+        max-height: 85vh;
+        overflow-y: auto;
+        border-radius: 20px;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15);
+    }
 
-/* Typography elements */
-.retro-modal-icon {
-    font-size: 2rem;
-    margin-bottom: 16px;
-    animation: scaleIn 0.3s ease;
-}
+    /* Typography elements */
+    .retro-modal-icon {
+        font-size: 2rem;
+        margin-bottom: 16px;
+        animation: scaleIn 0.3s ease;
+    }
 
-.retro-modal-title {
-    margin: 0 0 12px 0;
-    font-size: 1.35rem;
-    font-weight: 600;
-    color: #0f172a;
-    letter-spacing: -0.025em;
-}
+    .retro-modal-title {
+        margin: 0 0 12px 0;
+        font-size: 1.35rem;
+        font-weight: 600;
+        color: #0f172a;
+        letter-spacing: -0.025em;
+    }
 
-.wide-card .retro-modal-title {
-    margin-bottom: 8px;
-    font-size: 1.4rem;
-    letter-spacing: -0.02em;
-}
+    .wide-card .retro-modal-title {
+        margin-bottom: 8px;
+        font-size: 1.4rem;
+        letter-spacing: -0.02em;
+    }
 
-.retro-modal-description {
-    margin: 0 0 32px 0;
-    font-size: 0.95rem;
-    color: #64748b;
-    line-height: 1.6;
-}
+    .retro-modal-description {
+        margin: 0 0 32px 0;
+        font-size: 0.95rem;
+        color: #64748b;
+        line-height: 1.6;
+    }
 
-.retro-modal-description.padded-desc {
-    padding: 0 10px;
-}
+    .retro-modal-description.padded-desc {
+        padding: 0 10px;
+    }
 
-.retro-modal-sub-description {
-    margin: 0 0 28px 0;
-    font-size: 0.9rem;
-    color: #64748b;
-    line-height: 1.5;
-}
+    .retro-modal-sub-description {
+        margin: 0 0 28px 0;
+        font-size: 0.9rem;
+        color: #64748b;
+        line-height: 1.5;
+    }
 
-.highlight-text {
-    color: #0f172a;
-    font-weight: 500;
-}
+    .highlight-text {
+        color: #0f172a;
+        font-weight: 500;
+    }
 
-/* Structural & Form Framing Layouts */
-.retro-grid-frame {
-    display: grid;
-    gap: 16px;
-    margin-bottom: 28px;
-}
+    /* Structural & Form Framing Layouts */
+    .retro-grid-frame {
+        display: grid;
+        gap: 16px;
+        margin-bottom: 28px;
+    }
 
-.retro-section-row {
-    background: #f8fafc;
-    padding: 20px;
-    border-radius: 12px;
-    border: 1px solid #edf2f7;
-}
+    .retro-section-row {
+        background: #f8fafc;
+        padding: 20px;
+        border-radius: 12px;
+        border: 1px solid #edf2f7;
+    }
 
-.retro-checkbox-label {
-    font-weight: 600;
-    color: #1e293b;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    cursor: pointer;
-    font-size: 0.95rem;
-}
+    .retro-checkbox-label {
+        font-weight: 600;
+        color: #1e293b;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        cursor: pointer;
+        font-size: 0.95rem;
+    }
 
-.retro-checkbox-label input[type="checkbox"] {
-    width: 16px;
-    height: 16px;
-    accent-color: #0f172a;
-}
+    .retro-checkbox-label input[type="checkbox"] {
+        width: 16px;
+        height: 16px;
+        accent-color: #0f172a;
+    }
 
-.retro-animated-inputs {
-    animation: fadeIn 0.2s ease;
-}
+    .retro-animated-inputs {
+        animation: fadeIn 0.2s ease;
+    }
 
-.retro-animated-inputs.hidden-inputs {
-    display: none;
-    margin-top: 16px;
-    padding-top: 16px;
-}
+    .retro-animated-inputs.hidden-inputs {
+        display: none;
+        margin-top: 16px;
+        padding-top: 16px;
+    }
 
-.border-dashed-top {
-    border-top: 1px dashed #e2e8f0;
-}
+    .border-dashed-top {
+        border-top: 1px dashed #e2e8f0;
+    }
 
-.retro-input-split {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-}
+    .retro-input-split {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+    }
 
-.field-label {
-    font-size: 0.8rem;
-    font-weight: 500;
-    color: #64748b;
-    display: block;
-    margin-bottom: 6px;
-}
+    .field-label {
+        font-size: 0.8rem;
+        font-weight: 500;
+        color: #64748b;
+        display: block;
+        margin-bottom: 6px;
+    }
 
-.retro-input-control {
-    width: 100%;
-    padding: 10px 12px;
-    border: 1px solid #cbd5e1;
-    border-radius: 6px;
-    font-size: 0.9rem;
-    box-sizing: border-box;
-}
+    .retro-input-control {
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        font-size: 0.9rem;
+        box-sizing: border-box;
+    }
 
-/* Buttons & Dynamic Interactions */
-.retro-modal-actions {
-    gap: 12px;
-}
+    /* Buttons & Dynamic Interactions */
+    .retro-modal-actions {
+        gap: 12px;
+    }
 
-.retro-btn {
-    flex: 1;
-    max-width: 140px;
-    padding: 12px 24px;
-    font-size: 0.9rem;
-    font-weight: 500;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    box-sizing: border-box;
-}
+    .retro-btn {
+        flex: 1;
+        max-width: 140px;
+        padding: 12px 24px;
+        font-size: 0.9rem;
+        font-weight: 500;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        box-sizing: border-box;
+    }
 
-.retro-btn-secondary {
-    background: #f1f5f9;
-    color: #475569;
-}
+    .retro-btn-secondary {
+        background: #f1f5f9;
+        color: #475569;
+    }
 
-.retro-btn-secondary:hover {
-    background: #e2e8f0;
-}
+    .retro-btn-secondary:hover {
+        background: #e2e8f0;
+    }
 
-.retro-btn-primary {
-    background: #0f172a;
-    color: #ffffff;
-    box-shadow: 0 4px 6px -1px rgba(15,23,42,0.15);
-}
+    .retro-btn-primary {
+        background: #0f172a;
+        color: #ffffff;
+        box-shadow: 0 4px 6px -1px rgba(15, 23, 42, 0.15);
+    }
 
-.retro-btn-primary:hover {
-    background: #1e293b;
-}
+    .retro-btn-primary:hover {
+        background: #1e293b;
+    }
 
-.retro-btn-add {
-    margin-top: 4px;
-    background: #ffffff;
-    color: #0f172a;
-    border: 1px solid #cbd5e1;
-    padding: 8px 16px;
-    font-size: 0.85rem;
-    font-weight: 500;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: all 0.2s;
-}
+    .retro-btn-add {
+        margin-top: 4px;
+        background: #ffffff;
+        color: #0f172a;
+        border: 1px solid #cbd5e1;
+        padding: 8px 16px;
+        font-size: 0.85rem;
+        font-weight: 500;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
 
-.retro-btn-add:hover {
-    background: #f1f5f9;
-}
+    .retro-btn-add:hover {
+        background: #f1f5f9;
+    }
 
-.retro-footer-actions {
-    text-align: right;
-    display: flex;
-    gap: 12px;
-    justify-content: flex-end;
-    border-top: 1px solid #f1f5f9;
-    padding-top: 24px;
-}
+    .retro-footer-actions {
+        text-align: right;
+        display: flex;
+        gap: 12px;
+        justify-content: flex-end;
+        border-top: 1px solid #f1f5f9;
+        padding-top: 24px;
+    }
 
-.retro-footer-actions .retro-btn-primary {
-    max-width: none;
-    flex: none;
-    padding: 10px 24px;
-}
+    .retro-footer-actions .retro-btn-primary {
+        max-width: none;
+        flex: none;
+        padding: 10px 24px;
+    }
 
-.retro-btn-cancel {
-    padding: 10px 20px;
-    background: transparent;
-    color: #64748b;
-    border: 1px solid transparent;
-    font-size: 0.9rem;
-    font-weight: 500;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: color 0.2s;
-}
+    .retro-btn-cancel {
+        padding: 10px 20px;
+        background: transparent;
+        color: #64748b;
+        border: 1px solid transparent;
+        font-size: 0.9rem;
+        font-weight: 500;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: color 0.2s;
+    }
 
-.retro-btn-cancel:hover {
-    color: #0f172a;
-}
+    .retro-btn-cancel:hover {
+        color: #0f172a;
+    }
 
-/* Utilities */
-.text-center { text-align: center; }
-.flex-center { display: flex; justify-content: center; }
-.flex-align-center { display: flex; align-items: center; }
-.emoji-space { margin-right: 8px; }
+    /* Utilities */
+    .text-center {
+        text-align: center;
+    }
 
-/* Dynamic Added Rows Inside JS (Naka-class na rin) */
-.retro-return-row {
-    border: 1px solid #e2e8f0;
-    padding: 16px;
-    margin-bottom: 12px;
-    border-radius: 8px;
-    position: relative;
-    background: #ffffff;
-    animation: fadeIn 0.2s ease;
-}
+    .flex-center {
+        display: flex;
+        justify-content: center;
+    }
 
-/* Keyframes */
-@keyframes scaleIn {
-    from { transform: scale(0.96); opacity: 0; }
-    to { transform: scale(1); opacity: 1; }
-}
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(-4px); }
-    to { opacity: 1; transform: translateY(0); }
-}
+    .flex-align-center {
+        display: flex;
+        align-items: center;
+    }
+
+    .emoji-space {
+        margin-right: 8px;
+    }
+
+    /* Dynamic Added Rows Inside JS (Naka-class na rin) */
+    .retro-return-row {
+        border: 1px solid #e2e8f0;
+        padding: 16px;
+        margin-bottom: 12px;
+        border-radius: 8px;
+        position: relative;
+        background: #ffffff;
+        animation: fadeIn 0.2s ease;
+    }
+
+    /* Keyframes */
+    @keyframes scaleIn {
+        from {
+            transform: scale(0.96);
+            opacity: 0;
+        }
+
+        to {
+            transform: scale(1);
+            opacity: 1;
+        }
+    }
+
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(-4px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
     </style>
 </head>
 
@@ -963,7 +1019,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <button class="top-btn" type="button" onclick="showPanel('manual')">MANUAL</button>
         </div>
 
-        <!-- ═══════ SCAN PANEL ═══════ -->
         <div class="entry-panel" id="scanPanel">
             <form method="POST" action="" onsubmit="return beforeSubmit('scan')">
                 <input type="hidden" name="save_product" value="1">
@@ -972,7 +1027,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <input type="hidden" name="return_reason" id="scan_return_reason" value="">
                 <input type="hidden" name="active_panel" value="scan">
 
-                <!-- Pi Status Bar -->
                 <div id="piStatusBar">
                     <div id="piDot"></div>
                     <span id="piStatusText">Checking Raspberry Pi connection…</span>
@@ -980,7 +1034,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
 
                 <div class="main-grid">
-                    <!-- LEFT: camera feed -->
                     <div class="card">
                         <div class="card-title">Live Camera Feed</div>
 
@@ -1002,7 +1055,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <div id="piScanStatus" class="live-status-box">Waiting for Pi…</div>
                     </div>
 
-                    <!-- RIGHT: form -->
                     <div class="card">
                         <div class="card-title">Product Details</div>
 
@@ -1057,17 +1109,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     </div>
                 </div>
 
-                <div class="details-card" id="scanDetailsCard">
-                    <h3>Confirm Details</h3>
-                    <div class="details-content" id="scanDetailsContent">
-                        Product Name: --<br>Quantity: --<br>Expiration Date: --<br>Action: IN
+                <div id="scanDetailsCard" class="retro-modal-backdrop" style="display:none; justify-content:center; align-items:center;">
+                    <div class="retro-modal-card text-center" style="max-width:400px; padding:30px;">
+                        <div class="retro-modal-icon" style="font-size:3rem; margin-bottom:15px; display:block;">📋</div>
+                        <h3 class="retro-modal-title" style="margin-bottom:15px;">Confirm Details</h3>
+                        <div class="details-content retro-modal-description" id="scanDetailsContent" style="text-align:left; background:#f1f5f9; padding:20px; border-radius:8px; margin-bottom:20px; font-weight:500; font-size:1.1rem; line-height:1.6;">
+                            Product Name: --<br>Quantity: --<br>Expiration Date: --<br>Action: IN
+                        </div>
+                        <div class="retro-modal-actions" style="gap:10px; display:flex; justify-content:center;">
+                            <button type="button" class="modal-cancel-btn" onclick="document.getElementById('scanDetailsCard').style.display='none';" style="flex:1;">Cancel</button>
+                            <button type="submit" name="save_btn" class="save-btn" style="flex:1; padding:12px; border-radius:8px; border:none; background:#16a34a; color:white; font-weight:bold; cursor:pointer;">CONFIRM &amp; SAVE</button>
+                        </div>
                     </div>
-                    <button type="submit" name="save_btn" class="save-btn">CONFIRM &amp; SAVE</button>
                 </div>
             </form>
         </div>
 
-        <!-- ═══════ MANUAL PANEL ═══════ -->
         <div class="entry-panel" id="manualPanel" style="display:none;">
             <form id="manualProductForm" method="POST" action="" onsubmit="return beforeSubmit('manual')">
                 <input type="hidden" name="save_product" value="1">
@@ -1136,10 +1193,73 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     </div>
                     <button type="submit" name="save_btn" class="save-btn">CONFIRM</button>
                 </div>
+
+                <div id="retroQuestionModal" class="retro-modal-backdrop">
+                    <div class="retro-modal-card text-center">
+                        <div class="retro-modal-icon">⚠️</div>
+                        <h3 class="retro-modal-title">Back-Dated Entry Detected</h3>
+                        <p class="retro-modal-description padded-desc">
+                            The system detected that the <span class="highlight-text">"Date Scanned"</span> is
+                            configured to a past date. Did any <b>SOLD</b> or <b>RETURN</b> transactions occur for this
+                            batch prior to processing?
+                        </p>
+                        <div class="retro-modal-actions flex-center">
+                            <button type="button" id="btnRetroNo" class="retro-btn retro-btn-secondary">NO</button>
+                            <button type="button" id="btnRetroYes" class="retro-btn retro-btn-primary">YES</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="retroFormModal" class="retro-modal-backdrop">
+                    <div class="retro-modal-card wide-card">
+                        <h3 class="retro-modal-title flex-align-center">
+                            <span class="emoji-space">📝</span> Historical Transaction Logs
+                        </h3>
+                        <p class="retro-modal-sub-description">
+                            Log preceding sales or item returns that occurred while this specific batch was on shelves
+                            to establish synchronized inventory reconciliation.
+                        </p>
+
+                        <div class="retro-grid-frame">
+                            <div class="retro-section-row">
+                                <label class="retro-checkbox-label">
+                                    <input type="checkbox" id="chkRetroSold" name="has_retro_sold" value="1">
+                                    Include Sales Records
+                                </label>
+                                <div id="retroSoldInputs" class="retro-animated-inputs hidden-inputs border-dashed-top"
+                                    style="display:none;">
+                                    <div id="salesRowsContainer"></div>
+                                    <button type="button" id="btnAddingSalesRow" class="retro-btn-add">
+                                        + Add Dynamic Entry Row
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="retro-section-row">
+                                <label class="retro-checkbox-label">
+                                    <input type="checkbox" id="chkRetroReturn" name="has_retro_return" value="1">
+                                    Include Return Logs
+                                </label>
+                                <div id="retroReturnInputs"
+                                    class="retro-animated-inputs hidden-inputs border-dashed-top" style="display:none;">
+                                    <div id="returnRowsContainer"></div>
+                                    <button type="button" id="btnAddReturnRow" class="retro-btn-add">
+                                        + Add Dynamic Entry Row
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="retro-footer-actions">
+                            <button type="button" id="btnCancelRetroForm" class="retro-btn-cancel">Cancel</button>
+                            <button type="button" id="btnSubmitRetroForm" class="retro-btn retro-btn-primary">Finalize &
+                                Save All</button>
+                        </div>
+                    </div>
+                </div>
             </form>
         </div>
 
-        <!-- Return Modal -->
         <div id="returnModal"
             style="display:none;position:fixed;z-index:9999;left:0;top:0;width:100%;height:100%;background:rgba(0,0,0,0.6);backdrop-filter:blur(3px);">
             <div
@@ -1159,17 +1279,75 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
             </div>
         </div>
+
+        <!-- ══════════════ ERROR CUSTOM MODAL ══════════════ -->
+        <div id="retroErrorModal" class="retro-modal-backdrop"
+            style="display:none; position:fixed; z-index:10000; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0.6); backdrop-filter:blur(3px); align-items:center; justify-content:center;">
+            <div class="retro-modal-card text-center"
+                style="background:white; padding:25px; border-radius:15px; width:360px; box-shadow: 0 10px 25px rgba(0,0,0,0.2);">
+                <div class="retro-modal-icon" style="font-size: 2.5rem; margin-bottom: 10px;">❌</div>
+
+                <h3 class="retro-modal-title"
+                    style="color:#e11d48; margin-bottom: 15px; font-size: 1.2rem; font-weight: bold;">
+                    INACCURATE DATA ERROR
+                </h3>
+
+                <p id="errorModalMessage" class="retro-modal-description"
+                    style="font-size:0.9rem; color:#475569; line-height:1.5; margin-bottom:20px; text-align:left;">
+                </p>
+
+                <div class="flex-center">
+                    <button type="button" id="btnDismissError" class="retro-btn retro-btn-primary"
+                        style="background:#e11d48; color:white; border:none; padding:10px 25px; border-radius:8px; cursor:pointer; width:100%; font-weight:600;">
+                        OK
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div id="wasteFormModal" class="retro-modal-backdrop"
+            style="display:none; position:fixed; z-index:9999; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0.5); backdrop-filter:blur(2px); align-items:center; justify-content:center;">
+            <div class="retro-modal-card wide-card"
+                style="background:white; padding:25px; border-radius:12px; width:450px; box-shadow: 0 10px 25px rgba(0,0,0,0.15);">
+                <h3 class="retro-modal-title flex-align-center"
+                    style="margin-top:0; font-size:1.25rem; font-weight:700; color:#1e293b;">
+                    <span class="emoji-space">🗑️</span> Waste / Removal Log
+                </h3>
+                <p class="retro-modal-sub-description"
+                    style="font-size:0.85rem; color:#64748b; margin-bottom:20px; line-height:1.4;">
+                    Specify the exact date and time this specific batch was officially wasted or logged out from the
+                    active store shelves.
+                </p>
+
+                <div class="retro-grid-frame" style="margin-bottom:20px;">
+                    <div class="form-field">
+                        <label class="field-label"
+                            style="font-size:0.8rem; font-weight:600; color:#475569; display:block; margin-bottom:5px;">WASTED
+                            / LOGOUT TIMESTAMP</label>
+                        <input type="datetime-local" id="txtWasteLoggedAt" name="waste_logged_at"
+                            class="retro-input-control"
+                            style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px;">
+                    </div>
+                </div>
+
+                <div class="retro-footer-actions" style="display:flex; justify-content:flex-end; gap:10px;">
+                    <button type="button" id="btnCancelWasteForm" class="retro-btn-cancel"
+                        style="background:#f1f5f9; color:#475569; border:none; padding:8px 16px; border-radius:6px; cursor:pointer;">Cancel</button>
+                    <button type="button" id="btnSubmitWasteForm" class="retro-btn retro-btn-primary"
+                        style="background:#e11d48; color:white; border:none; padding:8px 20px; border-radius:6px; cursor:pointer; font-weight:600;">Confirm
+                        & Save Waste</button>
+                </div>
+            </div>
+        </div>
+
         <div id="cameraPermissionModal" class="permission-modal">
             <div class="permission-modal-content">
-                <div id="permIconBox" class="permission-icon-box">
-                    <i class="fas fa-camera"></i>
-                </div>
+                <div id="permIconBox" class="permission-icon-box"><i class="fas fa-camera"></i></div>
                 <h3 style="margin: 0 0 10px 0; font-size: 1.25rem; color: #1e293b;">System Permissions Required</h3>
                 <p style="margin: 0; font-size: 0.88rem; color: #64748b; line-height: 1.5;">
                     Allow the website to process image data via OCR for automated logging under Raspberry Pi 3B with
                     Camera Integration.
                 </p>
-
                 <div class="toggle-container">
                     <span class="switch-label" id="toggleStatusText">Camera Permission OFF</span>
                     <label class="switch">
@@ -1178,237 +1356,285 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <span class="slider"></span>
                     </label>
                 </div>
-
                 <button type="button" class="modal-close-btn" onclick="closePermissionModal()">DONE</button>
             </div>
         </div>
-
-        <div id="retroQuestionModal" class="retro-modal-backdrop">
-    <div class="retro-modal-card text-center">
-        <div class="retro-modal-icon">⚠️</div>
-        
-        <h3 class="retro-modal-title">
-            Back-Dated Entry Detected
-        </h3>
-        
-        <p class="retro-modal-description padded-desc">
-            The system detected that the <span class="highlight-text">"Date Scanned"</span> is configured to a past date. Did any <b>SOLD</b> or <b>RETURN</b> transactions occur for this batch prior to processing?
-        </p>
-        
-        <div class="retro-modal-actions flex-center">
-            <button type="button" id="btnRetroNo" class="retro-btn retro-btn-secondary">
-                NO
-            </button>
-            <button type="button" id="btnRetroYes" class="retro-btn retro-btn-primary">
-                YES
-            </button>
-        </div>
-    </div>
-</div>
-
-<!-- ══════════════ MODERNIZE: HISTORICAL TRANSACTION FORM MODAL ══════════════ -->
-<div id="retroFormModal" class="retro-modal-backdrop">
-    <div class="retro-modal-card wide-card">
-        <h3 class="retro-modal-title flex-align-center">
-            <span class="emoji-space">📝</span> Historical Transaction Logs
-        </h3>
-        <p class="retro-modal-sub-description">
-            Log preceding sales or item returns that occurred while this specific batch was on shelves to establish synchronized inventory reconciliation.
-        </p>
-
-        <div class="retro-grid-frame">
-            <!-- Sales Section Row -->
-            <div class="retro-section-row">
-                <label class="retro-checkbox-label">
-                    <input type="checkbox" id="chkRetroSold" name="has_retro_sold" value="1"> 
-                    Include Sales Records
-                </label>
-                <div id="retroSoldInputs" class="retro-animated-inputs hidden-inputs border-dashed-top">
-                    <div class="retro-input-split">
-                        <div class="form-field">
-                            <label class="field-label">QUANTITY SOLD</label>
-                            <input type="number" id="txtRetroSoldQty" name="retro_sold_qty" value="0" min="0" class="retro-input-control">
-                        </div>
-                        <div class="form-field">
-                            <label class="field-label">SOLD TIMESTAMP</label>
-                            <input type="datetime-local" id="txtRetroSoldAt" name="retro_sold_at" class="retro-input-control">
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Return Section Row -->
-            <div class="retro-section-row">
-                <label class="retro-checkbox-label">
-                    <input type="checkbox" id="chkRetroReturn" name="has_retro_return" value="1"> 
-                    Include Return Logs
-                </label>
-                <div id="retroReturnInputs" class="retro-animated-inputs hidden-inputs border-dashed-top">
-                    <div id="returnRowsContainer"></div>
-                    <button type="button" id="btnAddReturnRow" class="retro-btn-add">
-                        + Add Dynamic Entry Row
-                    </button>
-                </div>
-            </div>
-        </div>
-
-        <div class="retro-footer-actions">
-            <button type="button" id="btnCancelRetroForm" class="retro-btn-cancel">
-                Cancel
-            </button>
-            <button type="button" id="btnSubmitRetroForm" class="retro-btn retro-btn-primary">
-                Finalize & Save All
-            </button>
-        </div>
-    </div>
-</div>
     </main>
 
     <script>
-document.addEventListener("DOMContentLoaded", function() {
-    const form = document.getElementById("manualProductForm"); 
-    
-    if (!form) {
-        console.error("BUG ERROR: manualProductForm NOT SEEN.");
-        return;
-    }
+    document.addEventListener("DOMContentLoaded", function() {
+        const form = document.getElementById("manualProductForm");
+        const wasteModal = document.getElementById("wasteFormModal");
+        const btnCancelWaste = document.getElementById("btnCancelWasteForm");
+        const btnSubmitWaste = document.getElementById("btnSubmitWasteForm");
 
-    form.addEventListener("submit", function(e) {
-        // 1. Kunin ang piniling action mula sa hidden field (na binabago ng setAction button click)
-        const actionInput = document.getElementById("manual_action_type");
-        const scannedDateInput = document.getElementById("manual_scanned_date");
-        
-        const actionType = actionInput ? actionInput.value.toUpperCase() : '';
-        
-        // 2. Patakbuhin lang ang retroactive check kung 'IN' ang action type at may inedit na petsa
-        if (actionType === 'IN' && scannedDateInput && scannedDateInput.value !== "") {
-            
-            const selectedDate = new Date(scannedDateInput.value);
-            const now = new Date();
-            
-            // I-setup sa hatinggabi (00:00:00) para petsa lang talaga ang makumpara
-            const pureSelected = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
-            const pureNow = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-            
-            // Kung nakalipas na araw (Past Date) ang napili
-            if (pureSelected.getTime() !== pureNow.getTime() && pureSelected < pureNow) {
-                
-                // Kung hindi pa natatapos ang retro wizard setup
-                if (!form.dataset.wizardPassed) {
-                    
-                    e.preventDefault(); // HARANGAN ANG INLINE 'beforeSubmit' AT PHP SUBMISSION!
-                    e.stopImmediatePropagation(); // Pigilan ang iba pang scripts na mag-submit
-                    
-                    // I-pasa ang petsa sa retroactive fields
-                    const soldAtInput = document.getElementById("txtRetroSoldAt");
-                    if (soldAtInput) {
-                        soldAtInput.value = scannedDateInput.value;
-                    }
-                    
-                    // Labas ang Retroactive Dialog Question Modal!
-                    const questionModal = document.getElementById("retroQuestionModal");
-                    if (questionModal) {
-                        questionModal.style.display = "flex";
-                    }
-                    return false;
+        if (!form) {
+            console.error("BUG ERROR: manualProductForm NOT SEEN.");
+            return;
+        }
+
+        const btnAddSales = document.getElementById("btnAddingSalesRow");
+        if (btnAddSales) {
+            btnAddSales.addEventListener("click", addSalesRow);
+        }
+
+        function forceSubmitForm() {
+            form.dataset.wizardPassed = "true";
+
+            const wasteTimeInput = document.getElementById("txtWasteLoggedAt");
+            if (wasteTimeInput && wasteTimeInput.value) {
+                const oldHiddenWaste = document.getElementById("hidden_waste_logged_at");
+                if (oldHiddenWaste) oldHiddenWaste.remove();
+
+                const hiddenWaste = document.createElement("input");
+                hiddenWaste.type = "hidden";
+                hiddenWaste.id = "hidden_waste_logged_at";
+                hiddenWaste.name = "waste_logged_at";
+                hiddenWaste.value = wasteTimeInput.value;
+                form.appendChild(hiddenWaste);
+            }
+
+            if (!document.getElementById("hidden_save_btn")) {
+                const hiddenSubmit = document.createElement("input");
+                hiddenSubmit.type = "hidden";
+                hiddenSubmit.id = "hidden_save_btn";
+                hiddenSubmit.name = "save_btn";
+                hiddenSubmit.value = "1";
+                form.appendChild(hiddenSubmit);
+            }
+
+            form.submit();
+        }
+
+        function triggerWasteLogging() {
+            if (wasteModal) {
+                const baseScanDate = document.getElementById("manual_scanned_date").value || "";
+                const wasteTimeInput = document.getElementById("txtWasteLoggedAt");
+
+                if (wasteTimeInput) {
+                    wasteTimeInput.value = baseScanDate;
                 }
+                wasteModal.style.display = "flex";
             }
         }
-    }, { capture: true }); // Gumamit ng capture phase para mauna itong tumakbo kaysa sa onsubmit attribute!
 
-    // ══════════════ MODAL BUTTON HANDLERS ══════════════
-    
-    const btnNo = document.getElementById("btnRetroNo");
-    if (btnNo) {
-        btnNo.addEventListener("click", function() {
-            form.dataset.wizardPassed = "true";
-            document.getElementById("retroQuestionModal").style.display = "none";
-            form.submit(); // Diretsong submit na sa PHP
-        });
-    }
+        if (btnCancelWaste) {
+            btnCancelWaste.addEventListener("click", function() {
+                wasteModal.style.display = "none";
+            });
+        }
 
-    const btnYes = document.getElementById("btnRetroYes");
-    if (btnYes) {
-        btnYes.addEventListener("click", function() {
-            document.getElementById("retroQuestionModal").style.display = "none";
-            document.getElementById("retroFormModal").style.display = "flex";
-            
-            const container = document.getElementById("returnRowsContainer");
-            if (container && container.children.length === 0) {
-                addReturnRow();
+        if (btnSubmitWaste) {
+            btnSubmitWaste.addEventListener("click", function() {
+                const wasteTimeInput = document.getElementById("txtWasteLoggedAt");
+
+                if (wasteTimeInput && !wasteTimeInput.value) {
+                    alert("❌ Please select a valid date and time before saving.");
+                    return;
+                }
+
+                wasteModal.style.display = "none";
+                forceSubmitForm();
+            });
+        }
+
+        form.addEventListener("submit", function(e) {
+            const actionInput = document.getElementById("manual_action_type");
+            const scannedDateInput = document.getElementById("manual_scanned_date");
+            const actionType = actionInput ? actionInput.value.toUpperCase() : '';
+
+            if (actionType === 'IN' && scannedDateInput && scannedDateInput.value !== "") {
+                const selectedDate = new Date(scannedDateInput.value);
+                const now = new Date();
+
+                const pureSelected = new Date(selectedDate.getFullYear(), selectedDate.getMonth(),
+                    selectedDate.getDate());
+                const pureNow = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+                if (pureSelected.getTime() !== pureNow.getTime() && pureSelected < pureNow) {
+                    if (!form.dataset.wizardPassed) {
+                        e.preventDefault();
+                        e.stopImmediatePropagation();
+
+                        const questionModal = document.getElementById("retroQuestionModal");
+                        if (questionModal) {
+                            questionModal.style.display = "flex";
+                        }
+                        return false;
+                    }
+                }
             }
+        }, {
+            capture: true
         });
-    }
 
-    const chkSold = document.getElementById("chkRetroSold");
-    if (chkSold) {
-        chkSold.addEventListener("change", function() {
-            document.getElementById("retroSoldInputs").style.display = this.checked ? "block" : "none";
-        });
-    }
+        const btnNo = document.getElementById("btnRetroNo");
+        if (btnNo) {
+            btnNo.addEventListener("click", function() {
+                document.getElementById("retroQuestionModal").style.display = "none";
+                triggerWasteLogging();
+            });
+        }
 
-    const chkReturn = document.getElementById("chkRetroReturn");
-    if (chkReturn) {
-        chkReturn.addEventListener("change", function() {
-            document.getElementById("retroReturnInputs").style.display = this.checked ? "block" : "none";
-        });
-    }
+        const btnYes = document.getElementById("btnRetroYes");
+        if (btnYes) {
+            btnYes.addEventListener("click", function() {
+                document.getElementById("retroQuestionModal").style.display = "none";
+                document.getElementById("retroFormModal").style.display = "flex";
 
-    const btnAddRow = document.getElementById("btnAddReturnRow");
-    if (btnAddRow) {
-        btnAddRow.addEventListener("click", addReturnRow);
-    }
+                const container = document.getElementById("returnRowsContainer");
+                if (container && container.children.length === 0) {
+                    addReturnRow();
+                }
+            });
+        }
 
-    function addReturnRow() {
-        const container = document.getElementById("returnRowsContainer");
-        if (!container) return;
-        
-        const rowId = Date.now();
-        const baseScanDate = document.getElementById("manual_scanned_date").value;
-        
-        const rowHTML = `
-            <div class="retro-return-row" id="row_${rowId}" style="border:1px solid #ddd; padding:10px; margin-bottom:10px; border-radius:4px; position:relative;">
-                <span class="remove-row-btn" style="position:absolute; top:5px; right:5px; color:red; cursor:pointer; font-weight:bold;" onclick="document.getElementById('row_${rowId}').remove()">X</span>
-                <div style="margin-bottom:5px;">
-                    <label style="font-size:0.85em;">Return Quantity:</label>
-                    <input type="number" name="retro_return_qty[]" value="0" min="0" style="width:100%; padding:4px;">
-                </div>
-                <div style="margin-bottom:5px;">
-                    <label style="font-size:0.85em;">Reason:</label>
-                    <select name="retro_return_reason[]" style="width:100%; padding:4px;">
-                        <option value="Expired upon Purchase">Expired upon Purchase</option>
-                        <option value="Spoiled Food">Spoiled Food</option>
-                        <option value="Wrong Item">Wrong Item</option>
-                        <option value="Customer Change of Mind">Customer Change of Mind</option>
-                    </select>
-                </div>
-                <div>
-                    <label style="font-size:0.85em;">Returned At:</label>
-                    <input type="datetime-local" name="retro_return_at[]" value="${baseScanDate}" style="width:100%; padding:4px;">
+        const chkSold = document.getElementById("chkRetroSold");
+        if (chkSold) {
+            chkSold.addEventListener("change", function() {
+                const container = document.getElementById("salesRowsContainer");
+                if (this.checked) {
+                    document.getElementById("retroSoldInputs").style.display = "block";
+                    if (container && container.children.length === 0) {
+                        addSalesRow();
+                    }
+                } else {
+                    document.getElementById("retroSoldInputs").style.display = "none";
+                }
+            });
+        }
+
+        const chkReturn = document.getElementById("chkRetroReturn");
+        if (chkReturn) {
+            chkReturn.addEventListener("change", function() {
+                document.getElementById("retroReturnInputs").style.display = this.checked ? "block" :
+                    "none";
+            });
+        }
+
+        const btnAddRow = document.getElementById("btnAddReturnRow");
+        if (btnAddRow) {
+            btnAddRow.addEventListener("click", addReturnRow);
+        }
+
+        function addSalesRow() {
+            const container = document.getElementById("salesRowsContainer");
+            if (!container) return;
+
+            const rowId = Date.now();
+            const baseScanDate = document.getElementById("manual_scanned_date").value || "";
+
+            const rowHTML = `
+            <div class="retro-section-row row-entry-item" id="sales_row_${rowId}" style="position:relative; margin-bottom:15px; padding-top:10px;">
+                <span class="remove-row-btn" style="position:absolute; top:0; right:5px; color:#ef4444; cursor:pointer; font-weight:bold; font-size:1.1rem;" onclick="document.getElementById('sales_row_${rowId}').remove()">✕</span>
+                <div class="retro-input-split">
+                    <div class="form-field">
+                        <label class="field-label">QUANTITY SOLD</label>
+                        <input type="number" name="retro_sold_qty[]" value="1" min="1" class="retro-input-control">
+                    </div>
+                    <div class="form-field">
+                        <label class="field-label">SOLD TIMESTAMP</label>
+                        <input type="datetime-local" name="retro_sold_at[]" value="${baseScanDate}" class="retro-input-control">
+                    </div>
                 </div>
             </div>
         `;
-        container.insertAdjacentHTML('beforeend', rowHTML);
-    }
+            container.insertAdjacentHTML('beforeend', rowHTML);
+        }
 
-    const btnCancel = document.getElementById("btnCancelRetroForm");
-    if (btnCancel) {
-        btnCancel.addEventListener("click", function() {
-            document.getElementById("retroFormModal").style.display = "none";
-            delete form.dataset.wizardPassed;
-        });
-    }
+        function addReturnRow() {
+            const container = document.getElementById("returnRowsContainer");
+            if (!container) return;
 
-    const btnSubmitForm = document.getElementById("btnSubmitRetroForm");
-    if (btnSubmitForm) {
-        btnSubmitForm.addEventListener("click", function() {
-            form.dataset.wizardPassed = "true";
-            document.getElementById("retroFormModal").style.display = "none";
-            form.submit(); // I-submit ang buong batch kasama ang records
-        });
-    }
-});
-</script>
+            const rowId = Date.now();
+            const baseScanDate = document.getElementById("manual_scanned_date").value || "";
+
+            const rowHTML = `
+            <div class="retro-section-row row-entry-item" id="return_row_${rowId}" style="position:relative; margin-bottom:15px; padding-top:10px;">
+                <span class="remove-row-btn" style="position:absolute; top:0; right:5px; color:#ef4444; cursor:pointer; font-weight:bold; font-size:1.1rem;" onclick="document.getElementById('return_row_${rowId}').remove()">✕</span>
+                
+                <div class="retro-input-split" style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:10px;">
+                    <div class="form-field" style="flex:1; min-width:120px;">
+                        <label class="field-label">RETURN QUANTITY</label>
+                        <input type="number" name="retro_return_qty[]" value="1" min="1" class="retro-input-control">
+                    </div>
+                    <div class="form-field" style="flex:1; min-width:160px;">
+                        <label class="field-label">RETURNED AT</label>
+                        <input type="datetime-local" name="retro_return_at[]" value="${baseScanDate}" class="retro-input-control">
+                    </div>
+                </div>
+                
+                <div class="form-field" style="width:100%;">
+                    <label class="field-label">REASON</label>
+                    <select name="retro_return_reason[]" class="retro-input-control" style="width:100%;">
+                        <option value="Expired upon Purchase">Expired upon Purchase</option>
+                        <option value="Damaged Packaging">Damaged Packaging</option>
+                        <option value="Customer Return">Customer Return</option>
+                        <option value="Staff Error / Reconciled">Staff Error / Reconciled</option>
+                    </select>
+                </div>
+            </div>
+        `;
+            container.insertAdjacentHTML('beforeend', rowHTML);
+        }
+
+        const btnCancel = document.getElementById("btnCancelRetroForm");
+        if (btnCancel) {
+            btnCancel.addEventListener("click", function() {
+                document.getElementById("retroFormModal").style.display = "none";
+                delete form.dataset.wizardPassed;
+            });
+        }
+
+        const btnDismissError = document.getElementById("btnDismissError");
+        if (btnDismissError) {
+            btnDismissError.addEventListener("click", function() {
+                document.getElementById("retroErrorModal").style.display = "none";
+            });
+        }
+
+        const btnSubmitForm = document.getElementById("btnSubmitRetroForm");
+        if (btnSubmitForm) {
+            btnSubmitForm.addEventListener("click", function() {
+                const mainQtyInput = document.getElementById("manual_quantity");
+                const mainQty = mainQtyInput ? parseInt(mainQtyInput.value, 10) || 0 : 0;
+
+                let totalHistoricalQty = 0;
+
+                const chkSoldActive = document.getElementById("chkRetroSold");
+                if (chkSoldActive && chkSoldActive.checked) {
+                    const soldQtyInputs = document.querySelectorAll("input[name='retro_sold_qty[]']");
+                    soldQtyInputs.forEach(function(input) {
+                        totalHistoricalQty += parseInt(input.value, 10) || 0;
+                    });
+                }
+
+                const chkReturnActive = document.getElementById("chkRetroReturn");
+                if (chkReturnActive && chkReturnActive.checked) {
+                    const returnQtyInputs = document.querySelectorAll(
+                        "input[name='retro_return_qty[]']");
+                    returnQtyInputs.forEach(function(input) {
+                        totalHistoricalQty += parseInt(input.value, 10) || 0;
+                    });
+                }
+
+                if (totalHistoricalQty > mainQty) {
+                    const errorMsgEl = document.getElementById("errorModalMessage");
+                    if (errorMsgEl) {
+                        errorMsgEl.innerHTML =
+                            `Cannot process submission! The combined Sold and Return quantity (<b>${totalHistoricalQty} pcs</b>) exceeds the declared Stock Entry Quantity (<b>${mainQty} pcs</b>) for this batch.<br><br>Please reconcile the quantities before saving.`;
+                    }
+                    document.getElementById("retroErrorModal").style.display = "flex";
+                    return;
+                }
+
+                document.getElementById("retroFormModal").style.display = "none";
+                forceSubmitForm();
+            });
+        }
+
+    });
+    </script>
 
     <script>
     // ══════════════════════════════════════════════════
@@ -1534,9 +1760,6 @@ document.addEventListener("DOMContentLoaded", function() {
     }
 
     // ══════════════════════════════════════════════════
-    //  SCAN RESULT POLLING  (every 1.5 s)
-    // ══════════════════════════════════════════════════
-    // ══════════════════════════════════════════════════
     //  SCAN RESULT & LIVE POLLING (Every 1.5 s)
     // ══════════════════════════════════════════════════
     let lastScanTimestamp = '';
@@ -1573,6 +1796,16 @@ document.addEventListener("DOMContentLoaded", function() {
 
                 if (data.scan_status === 'READY' && data.updated_at !== lastScanTimestamp) {
                     lastScanTimestamp = data.updated_at;
+                    // Show pipeline stage in the status bar
+                    const stageMessages = {
+                        'front_done': '✓ Front scanned — product name received. Now scan the BACK label.',
+                        'back_done':  '✓ Back scanned — expiry date received. Now scan the FRONT label.',
+                        'complete':   '✓ Both labels scanned! Review details and confirm.',
+                        'idle':       'Waiting for Pi...',
+                    };
+                    if (data.pipeline && stageMessages[data.pipeline]) {
+                        setPiScanStatus(stageMessages[data.pipeline], data.pipeline !== 'idle');
+                    }
 
                     if (data.product_name && data.product_name.trim() !== '') {
                         nameInput.value = data.product_name;
@@ -1820,7 +2053,11 @@ document.addEventListener("DOMContentLoaded", function() {
         if (action === 'RETURN' && reason) html += `<br><strong style="color:#e74c3c;">Reason: ${esc(reason)}</strong>`;
 
         document.getElementById(mode + 'DetailsContent').innerHTML = html;
-        document.getElementById(mode + 'DetailsCard').classList.add('show');
+        if (mode === 'scan') {
+            document.getElementById(mode + 'DetailsCard').style.display = 'flex';
+        } else {
+            document.getElementById(mode + 'DetailsCard').classList.add('show');
+        }
     }
 
     function bindPreviewEvents() {

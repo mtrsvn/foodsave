@@ -165,7 +165,6 @@ $total_revenue = 0; $total_loss = 0; $total_sold_qty = 0; $total_waste_qty = 0;
             </a>
         </div>
 
-        <!-- STAT CARDS (Dito muna, lalamnan natin mamaya via JavaScript pagkatapos ma-compute ang walang data) -->
         <div class="stats-row">
             <div class="stat-card">
                 <div>

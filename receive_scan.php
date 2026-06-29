@@ -58,7 +58,20 @@ else {
 
 // 3. Execute
 if ($stmt->execute()) {
-    echo json_encode(['success' => true, 'message' => 'Live scan updated']);
+    // Determine pipeline stage for the response
+    if ($product_name !== '' && $expiry_input === '') {
+        $pipeline = 'front_done';
+    } elseif ($expiry_input !== '' && $product_name === '') {
+        $pipeline = 'back_done';
+    } else {
+        $pipeline = 'complete';
+    }
+
+    echo json_encode([
+        'success'  => true,
+        'message'  => 'Live scan updated',
+        'pipeline' => $pipeline
+    ]);
 } else {
     http_response_code(500);
     echo json_encode(['success' => false, 'message' => 'DB error: ' . $conn->error]);

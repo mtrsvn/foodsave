@@ -15,11 +15,27 @@ if (!$row) {
 }
 
 // 2. Prepare the response
+$scan_status = $row['scan_status'];
+$product_name = $row['product_name'] ?? '';
+$expiry_date = $row['expiry_date'] ?? '';
+
+// Derive a human-readable pipeline stage
+if ($scan_status === 'READY') {
+    $pipeline = 'complete';
+} elseif ($scan_status === 'PARTIAL' && $product_name !== '' && $expiry_date === '') {
+    $pipeline = 'front_done';
+} elseif ($scan_status === 'PARTIAL' && $expiry_date !== '' && $product_name === '') {
+    $pipeline = 'back_done';
+} else {
+    $pipeline = 'idle';
+}
+
 $response = [
     'success' => true,
-    'product_name' => $row['product_name'] ?? '',
-    'expiry_date' => $row['expiry_date'] ?? '',
-    'scan_status' => $row['scan_status'],
+    'product_name' => $product_name,
+    'expiry_date' => $expiry_date,
+    'scan_status' => $scan_status,
+    'pipeline' => $pipeline,
     'updated_at' => $row['updated_at']
 ];
 

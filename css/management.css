@@ -84,11 +84,12 @@
     margin-bottom:18px;
   }
 
-  .card{
-    background:var(--card);
-    border-radius:22px;
-    padding:18px;
-    box-shadow:0 5px 20px rgba(0,0,0,0.05);
+  
+  .card {
+    background: var(--card);
+    border-radius: 22px;
+    padding: 18px;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.05);
   }
 
   .card-title{
@@ -184,11 +185,11 @@
     text-align:center;
     font-size:15px;
   }
-
+  
   .manual-box{
     background:#97b287;
     border-radius:18px;
-    min-height:300px;
+    min-height:380px;
     display:flex;
     align-items:center;
     justify-content:center;
@@ -196,6 +197,8 @@
     color:#fff;
     text-align:center;
     padding:20px;
+    flex: 1;
+
   }
 
   .manual-icon{
@@ -511,3 +514,4 @@ input[readonly] {
     color: #475569 !important;
     user-select: none;
 }
+

@@ -9,7 +9,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit();
 }
 
-$user_id    = $_SESSION['user_id'];
+$user_id     = $_SESSION['user_id'];
 $report_type = $_POST['report_type']; 
 $date_preset = $_POST['date_preset'];
 $format      = $_POST['format'];    
@@ -60,6 +60,81 @@ $result = $stmt->get_result();
 
 $title = ($report_type === 'ALL') ? "GENERAL HISTORY REPORT" : "HISTORY REPORT FOR $report_type";
 $display_range = ($date_preset === 'custom') ? "$_POST[m_start_date] to $_POST[m_end_date]" : strtoupper($date_preset);
+
+if ($format === 'excel') {
+    $filename = "FoodSave_" . str_replace(" ", "_", $title) . "_" . date('Ymd_His') . ".xls";
+    
+    header("Content-Type: application/vnd.ms-excel; charset=utf-8");
+    header("Content-Disposition: attachment; filename=\"$filename\"");
+    header("Pragma: no-cache");
+    header("Expires: 0");
+
+    ?>
+    <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+    <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+        <style>
+            .text-mode { mso-number-format:"\@"; }
+            .price-mode { mso-number-format:"\#\,\#\#0\.00"; }
+        </style>
+    </head>
+    <body>
+        <table>
+            <tr>
+                <th colspan="6" style="font-size: 16px; font-weight: bold; text-align: center;"><?= $title ?></th>
+            </tr>
+            <tr>
+                <th colspan="6" style="font-size: 12px; text-align: center;">FoodSave Inventory Management System</th>
+            </tr>
+            <tr>
+                <td colspan="3"><b>Coverage:</b> <?= $display_range ?></td>
+                <td colspan="3" style="text-align: right;"><b>Generated:</b> <?= date('M d, Y - h:i A') ?></td>
+            </tr>
+            <tr></tr> <thead>
+                <tr style="background-color: #f2f2f2;">
+                    <th style="border: 0.5pt solid #ccc; font-weight: bold;">Date</th>
+                    <th style="border: 0.5pt solid #ccc; font-weight: bold;">Product Name</th>
+                    <th style="border: 0.5pt solid #ccc; font-weight: bold;">Type</th>
+                    <th style="border: 0.5pt solid #ccc; font-weight: bold;">Qty</th>
+                    <th style="border: 0.5pt solid #ccc; font-weight: bold;">Unit Price (PHP)</th>
+                    <th style="border: 0.5pt solid #ccc; font-weight: bold;">Total Price (PHP)</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php 
+                $grand_total = 0;
+                if ($result->num_rows > 0): 
+                    while($row = $result->fetch_assoc()): 
+                        $total = $row['quantity'] * ($row['price'] ?? 0);
+                        $grand_total += $total;
+                ?>
+                    <tr>
+                        <td style="border: 0.5pt solid #ccc;" class="text-mode"><?= date('Y-m-d H:i', strtotime($row['created_at'])) ?></td>
+                        <td style="border: 0.5pt solid #ccc;"><?= htmlspecialchars($row['prod_name'] ?: $row['product_name']) ?></td>
+                        <td style="border: 0.5pt solid #ccc; text-align: center;"><?= $row['type'] ?></td>
+                        <td style="border: 0.5pt solid #ccc; text-align: right;"><?= $row['quantity'] ?></td>
+                        <td style="border: 0.5pt solid #ccc; text-align: right;" class="price-mode"><?= number_format($row['price'] ?? 0, 2, '.', '') ?></td>
+                        <td style="border: 0.5pt solid #ccc; text-align: right;" class="price-mode"><?= number_format($total, 2, '.', '') ?></td>
+                    </tr>
+                <?php endwhile; ?>
+                <?php else: ?>
+                    <tr>
+                        <td colspan="6" style="border: 0.5pt solid #ccc; text-align:center;">No records found for this period.</td>
+                    </tr>
+                <?php endif; ?>
+            </tbody>
+            <tfoot>
+                <tr>
+                    <th colspan="5" style="border: 0.5pt solid #ccc; text-align: right; font-weight: bold;">Overall Total:</th>
+                    <th style="border: 0.5pt solid #ccc; text-align: right; font-weight: bold;" class="price-mode"><?= number_format($grand_total, 2, '.', '') ?></th>
+                </tr>
+            </footer>
+        </table>
+    </body>
+    </html>
+    <?php
+    exit();
+}
 
 ob_start();
 ?>

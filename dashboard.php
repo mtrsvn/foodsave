@@ -22,8 +22,8 @@ $low_stock_threshold = $user_settings['low_stock_threshold'] ?? 3;
 
 // --- OVERVIEW STATS (query source tables directly for accuracy) ---
 
-// Total products scanned (sum of all quantities)
-$r = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COALESCE(SUM(quantity), 0) as total FROM products WHERE user_id = $user_id"));
+// Total available products (current stock)
+$r = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COALESCE(SUM(remaining_stocks), 0) as total FROM inventory WHERE user_id = $user_id AND status NOT IN ('EXPIRED', 'SOLD OUT')"));
 $total_products = $r['total'];
 
 // Total sold quantity
@@ -156,169 +156,294 @@ if (isset($_GET['ajax']) && $_GET['ajax'] == '1') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FoodSave Inventory Dashboard</title>
-    <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght=400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/style.css">
-    <link rel="stylesheet" href="css/inventory.css">
-</head>
-<body class="bg-[#9cb594] text-gray-700">
 
+    <style>
+        body {
+            background-color: #9cb594;
+            color: #4a5568;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif !important;
+            margin: 0;
+            padding: 0;
+        }
+        
+        main {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .dashboard-stats-4-col {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+
+        .dashboard-grid-3-col {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+
+        @media (max-width: 1024px) {
+            .dashboard-stats-4-col { grid-template-columns: repeat(2, 1fr); }
+            .dashboard-grid-3-col { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 640px) {
+            .dashboard-stats-4-col { grid-template-columns: 1fr; }
+        }
+
+        .dash-card {
+            background: white;
+            padding: 16px;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            border: 1px solid #f3f4f6;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .dash-card-flex-col {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            border: 1px solid #f3f4f6;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+        .icon-box {
+            padding: 12px;
+            border-radius: 8px;
+            width: 48px;
+            height: 48px;
+            display: flex;
+            align-items: center;
+            justify-center: center;
+        }
+        .stat-num {
+            font-size: 1.875rem;
+            font-weight: 700;
+            line-height: 1;
+        }
+        .stat-lbl {
+            font-size: 0.75rem;
+            color: #9ca3af;
+            font-weight: 500;
+            margin-top: 4px;
+        }
+        
+        .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 5px;
+        width: 100%;
+    }
+    .filter-bar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        width: 100%;
+    }
+
+    .search-wrapper {
+        width: 60%;
+    }
+
+    .charts-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+        width: 100%;
+    }
+    </style>
+</head>
+<body>
     <?php include 'sidebar.php'; ?>
 
-    <main style="padding: 24px;">
-
-    <div class="bg-[#2e7d32] text-white p-3 rounded-lg flex justify-between items-center text-sm font-semibold mb-4 shadow-sm">
-        <div class="flex items-center space-x-2">
-            <span>WELCOME to FoodSave Inventory Dashboard</span>
+    <main>
+        
+        <div class="header-card" style="margin-bottom: 20px;">
+            <h2>WELCOME to FoodSave Inventory Dashboard</h2>
+            <p>Summary of all your food items</p>
         </div>
-        <div class="bg-[#1b5e20] px-4 py-1 rounded-md text-xs font-bold"><span id="val-active-products"><?= $total_products ?></span> Active Products</div>
+
+        <div class="dashboard-stats-4-col">
+            <div class="dash-card">
+                <div class="icon-box" style="background-color: #eff6ff; color: #2563eb;"><i class="fa-solid fa-box style='font-size: 20px;'"></i></div>
+                <div>
+                    <div id="val-total-products" class="stat-num" style="color: #2d4059;"><?= $total_products ?></div>
+                    <div class="stat-lbl">Total Products</div>
+                </div>
+            </div>
+            <div class="dash-card">
+                <div class="icon-box" style="background-color: #fff7ed; color: #f97316;"><i class="fa-solid fa-cart-shopping" style="font-size: 20px;"></i></div>
+                <div>
+                    <div id="val-total-sold" class="stat-num" style="color: #f97316;"><?= $total_sold ?></div>
+                    <div class="stat-lbl">Total Sold</div>
+                </div>
+            </div>
+            <div class="dash-card">
+                <div class="icon-box" style="background-color: #f0fdf4; color: #16a34a;"><i class="fa-solid fa-arrow-trend-up" style="font-size: 20px;"></i></div>
+                <div>
+                    <div id="val-total-revenue" class="stat-num" style="color: #16a34a;">₱<?= number_format($total_revenue, 2) ?></div>
+                    <div class="stat-lbl">Total Revenue</div>
+                </div>
+            </div>
+            <div class="dash-card">
+                <div class="icon-box" style="background-color: #fef2f2; color: #dc2626;"><i class="fa-solid fa-triangle-exclamation" style="font-size: 20px;"></i></div>
+                <div>
+                    <div id="val-low-stock" class="stat-num" style="color: #dc2626;"><?= $low_stock_items ?></div>
+                    <div class="stat-lbl">Low Stock Items Preference</div>
+                </div>
+            </div>
+        </div>
+
+<div style="background: transparent; border-radius: 16px; border: 1px solid rgba(255, 255, 255, 0.2); box-shadow: 0 4px 30px rgba(0, 0, 0, 0.05); padding: 30px; display: flex; flex-direction: column; gap: 16px;">
+
+    <div class="dashboard-grid-3-col" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 25px;">
+        
+        <div class="dash-card-flex-col">
+            <div>
+                <h3 style="font-weight: 700; color: #2d4059; font-size: 0.875rem; margin: 0;"><span style="color: #f472b6; margin-right: 8px;">🧠</span> Inventory Health Score</h3>
+                <p style="font-size: 11px; color: #9ca3af; margin: 2px 0 0 0;">Overall condition of your sandwich stock</p>
+            </div>
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 16px; margin-bottom:20px">
+                <div style="position: relative; width: 96px; height: 96px; display: flex; align-items: center; justify-content: center;">
+                    <canvas id="healthRingChart" style="position: absolute; inset: 0;"></canvas>
+                    <div style="text-align: center; z-index: 10;">
+                        <div id="val-health-score" style="font-size: 1.5rem; font-weight: 900; color: #1f2937;"><?= $overall_health ?>%</div>
+                        <div style="font-size: 9px; color: #16a34a; font-weight: 700; text-transform: uppercase; tracking-wider: 0.05em;">Health</div>
+                    </div>
+                </div>
+                <div style="flex: 1; margin-left: 24px; display: flex; flex-direction: column; gap: 10px; font-size: 12px;">
+                    <div style="background-color: #f0fdf4; color: #15803d; font-weight: 700; font-size: 11px; padding: 2px 8px; border-radius: 6px; width: max-content;">Status Feed</div>
+                    <div>
+                        <div style="display: flex; justify-content: space-between; color: #6b7280; font-size: 11px; font-weight: 500; margin-bottom: 4px;">
+                            <span><span style="width: 8px; height: 8px; id='usable-dot'; border-radius: 50%; background-color: #16a34a; margin-right: 8px; display: inline-block;"></span>Usable</span>
+                            <span id="val-fresh-pct" style="font-weight: 700; color: #374151;"><?= $fresh_percentage ?>%</span>
+                        </div>
+                        <div style="width: 100%; background-color: #f3f4f6; height: 6px; border-radius: 9999px;"><div id="bar-fresh" style="background-color: #16a34a; height: 6px; border-radius: 9999px; transition: all 0.5s; width: <?= $fresh_percentage ?>%"></div></div>
+                    </div>
+                    <div>
+                        <div style="display: flex; justify-content: space-between; color: #6b7280; font-size: 11px; font-weight: 500; margin-bottom: 4px;">
+                            <span><span style="width: 8px; height: 8px; border-radius: 50%; background-color: #fb923c; margin-right: 8px; display: inline-block;"></span>Expiring Soon</span>
+                            <span id="val-expiring-pct" style="font-weight: 700; color: #374151;"><?= $expiring_percentage ?>%</span>
+                        </div>
+                        <div style="width: 100%; background-color: #f3f4f6; height: 6px; border-radius: 9999px;"><div id="bar-expiring" style="background-color: #fb923c; height: 6px; border-radius: 9999px; transition: all 0.5s; width: <?= $expiring_percentage ?>%"></div></div>
+                    </div>
+                    <div>
+                        <div style="display: flex; justify-content: space-between; color: #6b7280; font-size: 11px; font-weight: 500; margin-bottom: 4px;">
+                            <span><span style="width: 8px; height: 8px; border-radius: 50%; background-color: #ef4444; margin-right: 8px; display: inline-block;"></span>Expired</span>
+                            <span id="val-expired-pct" style="font-weight: 700; color: #374151;"><?= $expired_percentage ?>%</span>
+                        </div>
+                        <div style="width: 100%; background-color: #f3f4f6; height: 6px; border-radius: 9999px;"><div id="bar-expired" style="background-color: #ef4444; height: 6px; border-radius: 9999px; transition: all 0.5s; width: <?= $expired_percentage ?>%"></div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="dash-card-flex-col">
+            <div>
+                <h3 style="font-weight: 700; color: #2d4059; font-size: 0.875rem; margin: 0;"><span style="color: #fb923c; margin-right: 8px;">💰</span> Profit vs Loss</h3>
+                <p style="font-size: 11px; color: #9ca3af; margin: 2px 0 0 0;">Financial impact of your inventory decisions</p>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 16px;">
+                <div style="background-color: #f0fdf4; padding: 12px; border-radius: 12px; border: 1px solid #dcfce7; display: flex; align-items: center; gap: 14px;">
+                    <div style="padding: 8px; background-color: white; color: #16a34a; border-radius: 50%; box-shadow: 0 1px 2px rgba(0,0,0,0.05); width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;"><i class="fa-solid fa-piggy-bank" style="font-size: 14px;"></i></div>
+                    <div>
+                        <div style="font-size: 10px; color: #166534; font-weight: 700; display: flex; align-items: center;"><i class="fa-solid fa-heart" style="margin-right: 4px; font-size: 8px;"></i> Money Profited</div>
+                        <div id="val-money-saved" style="font-size: 1.25rem; font-weight: 700; color: #1f2937;">₱<?= number_format($money_saved, 2) ?></div>
+                        <div style="font-size: 10px; color: #9ca3af; font-weight: 500;">Sold before expiry</div>
+                    </div>
+                </div>
+                <div style="background-color: #fef2f2; padding: 12px; border-radius: 12px; border: 1px solid #fee2e2; display: flex; align-items: center; gap: 14px;">
+                    <div style="padding: 8px; background-color: white; color: #ef4444; border-radius: 50%; box-shadow: 0 1px 2px rgba(0,0,0,0.05); width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;"><i class="fa-solid fa-triangle-exclamation" style="font-size: 14px;"></i></div>
+                    <div>
+                        <div style="font-size: 10px; color: #991b1b; font-weight: 700; display: flex; align-items: center;"><span style="width: 6px; height: 6px; border-radius: 50%; background-color: #dc2626; margin-right: 4px; display: inline-block;"></span> Estimated Waste</div>
+                        <div id="val-estimated-waste" style="font-size: 1.25rem; font-weight: 700; color: #1f2937;">₱<?= number_format($estimated_waste, 2) ?></div>
+                        <div style="font-size: 10px; color: #9ca3af; font-weight: 500;">Expired unsold stock</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="dash-card-flex-col">
+            <div>
+                <h3 style="font-weight: 700; color: #2d4059; font-size: 0.875rem; margin: 0;"><span style="color: #c084fc; margin-right: 8px;">📊</span> Trend Insights</h3>
+                <p style="font-size: 11px; color: #9ca3af; margin: 2px 0 0 0;">Quick facts about your inventory</p>
+            </div>
+            <div style="display: flex; flex-direction: column; margin-top: 12px; font-size: 12px; margin-bottom: 15px">
+                <div style="padding: 8px 0; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f3f4f6;">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <div style="padding: 6px; background-color: #fef2f2; color: #ef4444; border-radius: 6px;"><i class="fa-solid fa-triangle-exclamation"></i></div>
+                        <div>
+                            <div style="color: #9ca3af; font-size: 10px; font-weight: 500;">Most Wasted</div>
+                            <div id="val-most-wasted" style="font-weight: 700; color: #1f2937;"><?= $most_wasted_product ?></div>
+                        </div>
+                    </div>
+                </div>
+                <div style="padding: 8px 0; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f3f4f6;">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <div style="padding: 6px; background-color: #fff7ed; color: #fb923c; border-radius: 6px;"><i class="fa-solid fa-award" style="font-size: 14px;"></i></div>
+                        <div>
+                            <div style="color: #9ca3af; font-size: 10px; font-weight: 500;">Best Seller</div>
+                            <div id="val-best-seller" style="font-weight: 700; color: #1f2937;"><?= $best_seller_product ?></div>
+                        </div>
+                    </div>
+                </div>
+                <div style="padding: 8px 0; display: flex; justify-content: space-between; align-items: center;">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <div style="padding: 6px; background-color: #eff6ff; color: #60a5fa; border-radius: 6px;"><i class="fa-solid fa-calendar-days"></i></div>
+                        <div>
+                            <div style="color: #9ca3af; font-size: 10px; font-weight: 500;">Peak Sales Day</div>
+                            <div id="val-peak-day" style="font-weight: 700; color: #1f2937;"><?= $peak_sales_day ?></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-        <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center space-x-4">
-            <div class="p-3 bg-blue-50 text-blue-600 rounded-lg"><i class="fa-solid fa-box text-xl"></i></div>
+    <div class="dashboard-grid-3-col" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 25px;">
+        
+        <div class="dash-card-flex-col">
             <div>
-                <div id="val-total-products" class="text-3xl font-bold text-[#2d4059]"><?= $total_products ?></div>
-                <div class="text-xs text-gray-400 font-medium">Total Products</div>
+                <h3 style="font-weight: 700; color: #2d4059; font-size: 0.875rem; margin: 0;">Stock, Sold and Returned</h3>
+                <p style="font-size: 11px; color: #9ca3af; margin: 2px 0 0 0;">Remaining stock, units sold, and returns per sandwich type</p>
             </div>
-        </div>
-        <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center space-x-4">
-            <div class="p-3 bg-orange-50 text-orange-500 rounded-lg"><i class="fa-solid fa-cart-shopping text-xl"></i></div>
-            <div>
-                <div id="val-total-sold" class="text-3xl font-bold text-orange-500"><?= $total_sold ?></div>
-                <div class="text-xs text-gray-400 font-medium">Total Sold</div>
-            </div>
-        </div>
-        <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center space-x-4">
-            <div class="p-3 bg-green-50 text-green-600 rounded-lg"><i class="fa-solid fa-arrow-trend-up text-xl"></i></div>
-            <div>
-                <div id="val-total-revenue" class="text-3xl font-bold text-green-600">₱<?= number_format($total_revenue, 2) ?></div>
-                <div class="text-xs text-gray-400 font-medium">Total Revenue</div>
-            </div>
-        </div>
-        <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center space-x-4">
-            <div class="p-3 bg-red-50 text-red-500 rounded-lg"><i class="fa-solid fa-triangle-exclamation text-xl"></i></div>
-            <div>
-                <div id="val-low-stock" class="text-3xl font-bold text-red-500"><?= $low_stock_items ?></div>
-                <div class="text-xs text-gray-400 font-medium">Low Stock Items</div>
-            </div>
-        </div>
-    </div>
-
-
-
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
-        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-between">
-            <div>
-                <h3 class="font-bold text-[#2d4059] text-sm flex items-center"><span class="text-pink-400 mr-2">🧠</span> Inventory Health Score</h3>
-                <p class="text-[11px] text-gray-400 mt-0.5">Overall condition of your sandwich stock</p>
-            </div>
-            <div class="flex items-center justify-between mt-4">
-                <div class="relative w-24 h-24 flex items-center justify-center">
-                    <canvas id="healthRingChart" class="absolute inset-0"></canvas>
-                    <div class="text-center z-10">
-                        <div id="val-health-score" class="text-2xl font-black text-gray-800"><?= $overall_health ?>%</div>
-                        <div class="text-[9px] text-green-600 font-bold uppercase tracking-wider">Health</div>
-                    </div>
-                </div>
-                <div class="flex-1 ml-6 space-y-2.5 text-xs">
-                    <div class="bg-green-50 text-green-700 font-bold text-[11px] px-2 py-0.5 rounded-md w-max flex items-center">Live Scanner Feed</div>
-                    <div>
-                        <div class="flex justify-between text-gray-500 text-[11px] font-medium mb-1">
-                            <span><span class="w-2 h-2 rounded-full bg-green-600 mr-2 inline-block"></span>Usable</span>
-                            <span id="val-fresh-pct" class="font-bold text-gray-700"><?= $fresh_percentage ?>%</span>
-                        </div>
-                        <div class="w-full bg-gray-100 h-1.5 rounded-full"><div id="bar-fresh" class="bg-green-600 h-1.5 rounded-full transition-all duration-500" style="width: <?= $fresh_percentage ?>%"></div></div>
-                    </div>
-                    <div>
-                        <div class="flex justify-between text-gray-500 text-[11px] font-medium mb-1">
-                            <span><span class="w-2 h-2 rounded-full bg-orange-400 mr-2 inline-block"></span>Expiring Soon</span>
-                            <span id="val-expiring-pct" class="font-bold text-gray-700"><?= $expiring_percentage ?>%</span>
-                        </div>
-                        <div class="w-full bg-gray-100 h-1.5 rounded-full"><div id="bar-expiring" class="bg-orange-400 h-1.5 rounded-full transition-all duration-500" style="width: <?= $expiring_percentage ?>%"></div></div>
-                    </div>
-                    <div>
-                        <div class="flex justify-between text-gray-500 text-[11px] font-medium mb-1">
-                            <span><span class="w-2 h-2 rounded-full bg-red-500 mr-2 inline-block"></span>Expired</span>
-                            <span id="val-expired-pct" class="font-bold text-gray-700"><?= $expired_percentage ?>%</span>
-                        </div>
-                        <div class="w-full bg-gray-100 h-1.5 rounded-full"><div id="bar-expired" class="bg-red-500 h-1.5 rounded-full transition-all duration-500" style="width: <?= $expired_percentage ?>%"></div></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-between">
-            <div>
-                <h3 class="font-bold text-[#2d4059] text-sm flex items-center"><span class="text-orange-400 mr-2">💰</span> Waste vs Savings</h3>
-                <p class="text-[11px] text-gray-400 mt-0.5">Financial impact of your inventory decisions</p>
-            </div>
-            <div class="space-y-3 mt-4">
-                <div class="bg-[#ebf7ee] p-3 rounded-xl border border-green-100 flex items-center space-x-3.5">
-                    <div class="p-2 bg-white text-green-600 rounded-full shadow-sm w-9 h-9 flex items-center justify-center"><i class="fa-solid fa-piggy-bank text-sm"></i></div>
-                    <div>
-                        <div class="text-[10px] text-green-700 font-bold flex items-center"><i class="fa-solid fa-heart mr-1 text-[8px]"></i> Money Saved</div>
-                        <div id="val-money-saved" class="text-xl font-bold text-gray-800">₱<?= number_format($money_saved, 2) ?></div>
-                        <div class="text-[10px] text-gray-400 font-medium">Sold before expiry</div>
-                    </div>
-                </div>
-                <div class="bg-[#fdf2f2] p-3 rounded-xl border border-red-100 flex items-center space-x-3.5">
-                    <div class="p-2 bg-white text-red-500 rounded-full shadow-sm w-9 h-9 flex items-center justify-center"><i class="fa-solid fa-triangle-exclamation text-sm"></i></div>
-                    <div>
-                        <div class="text-[10px] text-red-600 font-bold flex items-center"><span class="w-1.5 h-1.5 rounded-full bg-red-600 mr-1"></span> Estimated Waste</div>
-                        <div id="val-estimated-waste" class="text-xl font-bold text-gray-800">₱<?= number_format($estimated_waste, 2) ?></div>
-                        <div class="text-[10px] text-gray-400 font-medium">Expired unsold stock</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-between">
-            <div>
-                <h3 class="font-bold text-[#2d4059] text-sm flex items-center"><span class="text-purple-400 mr-2">📊</span> Trend Insights</h3>
-                <p class="text-[11px] text-gray-400 mt-0.5">Quick facts about your inventory</p>
-            </div>
-            <div class="divide-y divide-gray-100 text-xs mt-3">
-                <div class="py-2 flex justify-between items-center"><div class="flex items-center space-x-3"><div class="p-1.5 bg-red-50 text-red-500 rounded-md"><i class="fa-solid fa-triangle-exclamation"></i></div><div><div class="text-gray-400 text-[10px] font-medium">Most Wasted</div><div id="val-most-wasted" class="font-bold text-gray-800"><?= $most_wasted_product ?></div></div></div></div>
-                <div class="py-2 flex justify-between items-center"><div class="flex items-center space-x-3"><div class="p-1.5 bg-orange-50 text-orange-400 rounded-md"><i class="fa-solid fa-award text-sm"></i></div><div><div class="text-gray-400 text-[10px] font-medium">Best Seller</div><div id="val-best-seller" class="font-bold text-gray-800"><?= $best_seller_product ?></div></div></div></div>
-                <div class="py-2 flex justify-between items-center"><div class="flex items-center space-x-3"><div class="p-1.5 bg-blue-50 text-blue-400 rounded-md"><i class="fa-solid fa-calendar-days"></i></div><div><div class="text-gray-400 text-[10px] font-medium">Peak Sales Day</div><div id="val-peak-day" class="font-bold text-gray-800"><?= $peak_sales_day ?></div></div></div></div>
-            </div>
-        </div>
-    </div>
-
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-between">
-            <div>
-                <h3 class="font-bold text-[#2d4059] text-sm">Stock, Sold and Returned</h3>
-                <p class="text-[11px] text-gray-400 mt-0.5">Remaining stock, units sold, and returns per sandwich type</p>
-            </div>
-            <div class="h-52 mt-4 relative">
+            <div style="height: 208px; margin-top: 16px; position: relative;">
                 <canvas id="stockVsSoldChart"></canvas>
             </div>
         </div>
 
-        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col items-center justify-between">
-            <div class="w-full text-left">
-                <h3 class="font-bold text-[#2d4059] text-sm">Sales Share</h3>
-                <p class="text-[11px] text-gray-400 mt-0.5">Which sandwich sells the most (Popularity Sorted)</p>
+        <div class="dash-card-flex-col" style="align-items: center;">
+            <div style="width: 100%; text-align: left;">
+                <h3 style="font-weight: 700; color: #2d4059; font-size: 0.875rem; margin: 0;">Sales Share</h3>
+                <p style="font-size: 11px; color: #9ca3af; margin: 2px 0 0 0;">Which sandwich sells the most (Popularity Sorted)</p>
             </div>
-            <div class="w-44 h-44 my-2 relative">
+            <div style="width: 176px; height: 176px; margin: 8px 0; position: relative;">
                 <canvas id="salesShareChart"></canvas>
             </div>
         </div>
 
-        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-between">
+        <div class="dash-card-flex-col">
             <div>
-                <h3 class="font-bold text-[#2d4059] text-sm">Revenue per Product</h3>
-                <p class="text-[11px] text-gray-400 mt-0.5">Total ₱ earned from each sandwich</p>
+                <h3 style="font-weight: 700; color: #2d4059; font-size: 0.875rem; margin: 0;">Revenue per Product</h3>
+                <p style="font-size: 11px; color: #9ca3af; margin: 2px 0 0 0;">Total ₱ earned from each sandwich</p>
             </div>
-            <div class="h-56 mt-2 relative">
+            <div style="height: 224px; margin-top: 8px; position: relative;">
                 <canvas id="revenueBarChart"></canvas>
             </div>
         </div>
     </div>
+
+</div>
 
     <script>
         let labelsList   = <?= json_encode($product_names) ?>;

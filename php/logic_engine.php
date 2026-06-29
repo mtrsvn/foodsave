@@ -1,8 +1,16 @@
 <?php
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
 date_default_timezone_set('Asia/Manila');
 
 require_once __DIR__ . '/../vendor/autoload.php';
 require_once __DIR__ . '/../db.php';
+require_once __DIR__ . '/../PHPMailer/src/Exception.php';
+require_once __DIR__ . '/../PHPMailer/src/PHPMailer.php';
+require_once __DIR__ . '/../PHPMailer/src/SMTP.php';
+
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\Exception;
 
 $conf = require __DIR__ . '/../config/pusher.php';
 
@@ -18,6 +26,7 @@ $users_result = $conn->query("SELECT * FROM users");
 if ($users_result && $users_result->num_rows > 0) {
     while ($u = $users_result->fetch_assoc()) {
         $user_id = $u['user_id'];
+        $user_email = $u['email'];
         
         $inventory_query = "SELECT 
                                 product_name, 
@@ -44,7 +53,8 @@ if ($users_result && $users_result->num_rows > 0) {
                     $title = "EXPIRING: $p_name";
                     if (canSendAlert($conn, $user_id, $title, $u['notif_interval_hours'], $db_expiry)) {
                         $msg = "Item $p_name (Expiry: $db_expiry) is approaching its expiration date with $stocks units left.";
-                        insertAndPush($conn, $pusher, $user_id, $p_id, $title, $msg, 'Near Expiry', $db_expiry, $stocks);
+                        insertAndPush($conn, $pusher, $user_id, $p_id, $title, $msg, 'Near Expiry', $db_expiry, $stocks, $user_email, $p_name, $days_left);
+                        echo "CHECKING NEAR EXPIRY: $p_name<br>";
                     }
                 }
 
@@ -63,7 +73,8 @@ if ($users_result && $users_result->num_rows > 0) {
                         
                         if ($check_exp->num_rows == 0) {
                             $msg = "$p_name has expired on $db_expiry. Please dispose of the remaining $stocks units safely.";
-                            insertAndPush($conn, $pusher, $user_id, $p_id, $title, $msg, 'Expired', $db_expiry, $stocks);
+                            insertAndPush($conn, $pusher, $user_id, $p_id, $title, $msg, 'Expired', $db_expiry, $stocks, $user_email, $p_name, $days_left);
+                            echo "CHECKING EXPIRED: $p_name<br>";
                         }
                     }
                 }
@@ -73,7 +84,8 @@ if ($users_result && $users_result->num_rows > 0) {
                     $title = "LOW STOCK: $p_name";
                     if (canSendAlert($conn, $user_id, $title, $u['notif_interval_hours'], $db_expiry)) {
                         $msg = "$p_name is running low. Only $stocks units remaining (Expiry: $db_expiry).";
-                        insertAndPush($conn, $pusher, $user_id, $p_id, $title, $msg, 'Low Stock', $db_expiry, $stocks);
+                        insertAndPush($conn, $pusher, $user_id, $p_id, $title, $msg, 'Low Stock', $db_expiry, $stocks, $user_email, $p_name, $days_left);
+                        echo "CHECKING LOW STOCK: $p_name<br>";
                     }
                 }
             }
@@ -83,7 +95,10 @@ if ($users_result && $users_result->num_rows > 0) {
 
 // --- HELPER FUNCTIONS ---
 
-function insertAndPush($conn, $pusher, $user_id, $p_id, $title, $msg, $category, $expiry, $stock) {
+function insertAndPush($conn, $pusher, $user_id, $p_id, $title, $msg, $category, $expiry, $stock, $user_email, $p_name, $days_left) {
+    
+echo "INSERT FUNCTION CALLED<br>";
+    echo "User Email: " . $user_email . "<br>";
     $lowStockRecos = [
         "Contact supplier for immediate restock.", 
         "Check warehouse for unrecorded items.", 
@@ -125,6 +140,101 @@ function insertAndPush($conn, $pusher, $user_id, $p_id, $title, $msg, $category,
         'message' => $msg,
         'category' => $category
     ]);
+
+    if (!empty($user_email)) {
+
+    echo "EMAIL BLOCK ENTERED<br>";
+
+    $mail = new \PHPMailer\PHPMailer\PHPMailer(true);
+
+    try {
+
+        echo "BEFORE SEND<br>";
+
+        $mail->SMTPDebug = 0; 
+            
+            $mail->isSMTP();
+            $mail->Host       = 'smtp.hostinger.com';
+            $mail->SMTPAuth   = true;
+            $mail->Username   = 'marikina@foodsave.shop'; 
+            $mail->Password   = 'Adminseven@7';            
+            $mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS;
+            $mail->Port = 465;
+            
+            $mail->SMTPOptions = array(
+                'ssl' => array(
+                    'verify_peer' => false,
+                    'verify_peer_name' => false,
+                    'allow_self_signed' => true
+                )
+            );
+
+            $mail->setFrom('marikina@foodsave.shop', 'FoodSave Alerts');
+            $mail->addAddress($user_email);
+
+            $mail->isHTML(true);
+            $mail->Subject = "FoodSave System Alert: " . $title;
+            
+            $formatted_expiry = (!empty($expiry) && $expiry !== '0000-00-00') ? date('m/d/Y', strtotime($expiry)) : '--';
+            $daysColor = ($days_left <= 3) ? '#dc2626' : '#f59e0b';
+
+            $mail->Body = "
+            <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;'>
+                <div style='background-color: #8dae84; padding: 20px; text-align: center; color: white;'>
+                    <h1 style='margin: 0; font-size: 24px;'>FoodSave Alert</h1>
+                    <p style='margin: 5px 0 0; opacity: 0.9;'>Automated Operational Notification</p>
+                </div>
+                <div style='padding: 30px; background-color: #ffffff;'>
+                    <h2 style='color: #1e293b; margin-top: 0;'>{$title}</h2>
+                    <p style='color: #475569; font-size: 16px; line-height: 1.6;'>{$msg}</p>
+                    
+                    <hr style='border: 0; border-top: 1px solid #e2e8f0; margin: 25px 0;'>
+                    
+                    <table style='width: 100%; border-collapse: collapse; font-size: 14px;'>
+                        <tr>
+                            <td style='padding: 8px 0; color: #94a3b8;'>Category:</td>
+                            <td style='padding: 8px 0; font-weight: bold; color: #1e293b;'>{$category}</td>
+                        </tr>
+                        <tr>
+                            <td style='padding: 8px 0; color: #94a3b8;'>Product Name:</td>
+                            <td style='padding: 8px 0; font-weight: bold; color: #1e293b;'>{$p_name}</td>
+                        </tr>
+                        <tr>
+                            <td style='padding: 8px 0; color: #94a3b8;'>Stocks Left:</td>
+                            <td style='padding: 8px 0; font-weight: bold; color: #dc2626;'>{$stock} unit(s)</td>
+                        </tr>
+                        <tr>
+                            <td style='padding: 8px 0; color: #94a3b8;'>Expiration Date:</td>
+                            <td style='padding: 8px 0; font-weight: bold; color: #1e293b;'>{$formatted_expiry}</td>
+                        </tr>
+                        <tr>
+                            <td style='padding: 8px 0; color: #94a3b8;'>Days Remaining:</td>
+                            <td style='padding: 8px 0; font-weight: bold; color: {$daysColor};'>{$days_left} day(s)</td>
+                        </tr>
+                    </table>
+                    
+                    <div style='margin-top: 25px; padding: 15px; background-color: #fffbeb; border-left: 4px solid #f59e0b; border-radius: 4px;'>
+                        <h4 style='margin: 0; color: #92400e;'>💡 Recommendation:</h4>
+                        <p style='margin: 5px 0 0; color: #b45309; font-style: italic;'>\"{$reco}\"</p>
+                    </div>
+                </div>
+                <div style='background-color: #f8fafc; padding: 15px; text-align: center; color: #94a3b8; font-size: 12px; border-top: 1px solid #e2e8f0;'>
+                    This is an automated system message. Please check your up-to-date dashboard for immediate action.
+                </div>
+            </div>
+            ";
+
+
+        $mail->send();
+
+        echo "AFTER SEND<br>";
+
+    } catch (Exception $e) {
+
+        echo "MAIL ERROR: " . $mail->ErrorInfo . "<br>";
+    }
+}
+
 }
 
 function canSendAlert($conn, $user_id, $title, $hours, $expiry_date = null) {
@@ -139,13 +249,15 @@ function canSendAlert($conn, $user_id, $title, $hours, $expiry_date = null) {
     $stmt->execute();
     $result = $stmt->get_result();
     
-    if ($result->num_rows == 0) return true;
+    if ($result->num_rows == 0) {
+        $stmt->close();
+        return true;
+    }
     
     $last_time = strtotime($result->fetch_assoc()['created_at']);
     $stmt->close();
     
     return (time() - $last_time) >= ($hours * 3600);
 }
-
 echo "Logic Engine executed successfully at " . date('Y-m-d H:i:s');
 ?>

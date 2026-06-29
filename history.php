@@ -414,6 +414,7 @@ $active_color = '#6b8e61';
                 <div class="export-option-group">
                     <label>Export Format</label>
                     <select name="format">
+                        <option value="excel">Excel Spreadsheet (.xlsx)</option>
                         <option value="pdf">PDF Document</option>
                         <option value="image">Image (PNG)</option>
                     </select>

@@ -5,7 +5,7 @@ date_default_timezone_set('Asia/Manila');
 ini_set('date.timezone', 'Asia/Manila');
 
 if (isset($_SESSION['user_id'])) {
-    header("Location: inventory");
+    header("Location: dashboard");
     exit();
 }
 
@@ -35,7 +35,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             
             $_SESSION['user_email'] = $user['email'];
             
-            header("Location: inventory");
+            header("Location: dashboard");
             exit();
         } else {
             $error = "Invalid password.";

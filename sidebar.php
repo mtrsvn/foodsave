@@ -10,10 +10,12 @@ ini_set('date.timezone', 'Asia/Manila');
 ?>
 
 <aside>
+    <script src="https://js.pusher.com/8.0.1/pusher.min.js"></script>
     <div class="brand">
         <div class="brand-icon"><i class="fas fa-shopping-cart"></i></div>
         <h1>FoodSave</h1>
     </div>
+    
 
     <div class="user-profile">
         <div class="avatar">
@@ -43,7 +45,7 @@ ini_set('date.timezone', 'Asia/Manila');
                 </a>
             </li>
             <li>
-               <a href="product-management.php" class="<?= ($current_page == 'product-management.php') ? 'active' : '' ?>"> 
+                <a href="product-management.php" class="<?= ($current_page == 'product-management.php') ? 'active' : '' ?>"> 
                     <i class="fa-solid fa-expand"></i> Scan Products
                 </a>
             </li>
@@ -99,6 +101,13 @@ let pusher = null;
 let channel = null;
 
 function initPusher() {
+    // FAIL-SAFE CHECK: Kung hindi pa tapos mag-load ang CDN library, mag-antay ng 100ms bago subukan ulit
+    if (typeof Pusher === 'undefined') {
+        console.warn('⚠️ Pusher SDK loading delayed... Retrying in 100ms');
+        setTimeout(initPusher, 1000);
+        return;
+    }
+
     pusher = new Pusher('d97196e21b43e27b46ba', {
         cluster: 'ap1',
         encrypted: true
@@ -121,6 +130,7 @@ function initPusher() {
             });
         }
     });
+    console.log('📡 Pusher connection successfully initialized.');
 }
 
 function playNotificationSound() {
@@ -198,15 +208,14 @@ function updateBadgeUI(count) {
     }
 }
 
-
 document.addEventListener('DOMContentLoaded', function() {
     initPusher();
     
     window.addEventListener('message', function(e) {
-    if (e.data.type === 'NOTIF_COUNT_UPDATE') {
-        updateBadgeUI(e.data.count);
-    }
-});
+        if (e.data.type === 'NOTIF_COUNT_UPDATE') {
+            updateBadgeUI(e.data.count);
+        }
+    });
 
     setInterval(checkAndGenerateAlerts, 600000);
     checkAndGenerateAlerts();
@@ -217,7 +226,6 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 console.log('Sidebar: PUSHER LIVE + AJAX Backup READY!');
-
 </script>
 
 <style>
